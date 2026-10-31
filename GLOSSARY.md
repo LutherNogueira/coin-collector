@@ -1,6 +1,6 @@
 # Coin Collector
 
-A small 2D game in which the player collects coins while avoiding obstacles, and whose every action is recorded as an analyzable event stream.
+A small 2D platformer in which the player collects coins in a fixed level while avoiding traps, and whose every action is recorded as an analyzable event stream.
 
 ## Language
 
@@ -9,23 +9,39 @@ One run of the game program, from launch to closing the window. Contains one or 
 _Avoid_: Run, execution, game
 
 **Round**:
-One play of the arena, from its start until the player dies or time runs out.
-_Avoid_: Match, game, level, partida
+One play of the level, from its start until every coin has been collected or the window is closed. A Round has no time limit and can contain several Attempts.
+_Avoid_: Match, game, partida
+
+**Attempt**:
+One go at the level inside a Round. A new Attempt begins at the start of the Round and after every Death.
+_Avoid_: Life, try
+
+**Level**:
+The fixed layout of Solids, Traps and Coins that every Attempt plays through.
+_Avoid_: Map, stage, fase
 
 **Player**:
-The square the user moves around the arena.
+The square the user moves and makes jump.
 _Avoid_: Character, avatar
 
 **Coin**:
-A collectible that appears at a random place in the arena, one at a time. Collecting it scores a point.
+A collectible at a fixed place in the Level. A Round is complete when all of them have been collected in a single Attempt.
 _Avoid_: Pickup, token
 
-**Obstacle**:
-A red square that crosses the arena in a straight line and kills the Player on contact.
-_Avoid_: Enemy, hazard
+**Solid**:
+A part of the Level the Player can stand on and cannot pass through.
+_Avoid_: Wall, obstacle, platform
+
+**Trap**:
+A fixed hazard that kills the Player on contact.
+_Avoid_: Spike, enemy, obstacle
+
+**Pit**:
+A gap in the ground. Falling below the Level kills the Player.
+_Avoid_: Hole, void
 
 **Death**:
-The Player touching an Obstacle, which ends the Round immediately.
+The Player touching a Trap or falling into a Pit. It ends the Attempt and starts a new one.
 _Avoid_: Game over, hit
 
 **Event**:
@@ -37,5 +53,5 @@ The ordered sequence of Events produced by Sessions, stored one Event per line.
 _Avoid_: Log file, dataset
 
 **Schema**:
-The definition of which Event types exist and which fields each one carries.
+The definition of which Event types exist and which fields each one carries. Versioned by `schema_version`.
 _Avoid_: Format, spec

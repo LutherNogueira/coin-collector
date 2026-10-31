@@ -1,8 +1,7 @@
-"""Validate an events.jsonl file against schema/events.schema.json.
+"""Validate an events.jsonl file against the schema matching each line's `schema_version`.
 
-Besides the JSON Schema check on every line, it verifies per-round consistency:
-a round starts once, ends at most once, has at most one death, and the
-`round_end` counters match the events actually recorded.
+Besides the JSON Schema check on every line, it verifies per-round consistency
+(see `check_round_v1` and `check_round_v2`).
 
 Usage: python validate_events.py [path/to/events.jsonl]
 """
@@ -14,8 +13,16 @@ from pathlib import Path
 
 from jsonschema import Draft202012Validator
 
-SCHEMA_PATH = Path(__file__).parent / "schema" / "events.schema.json"
+SCHEMA_DIR = Path(__file__).parent / "schema"
 DEFAULT_LOG = Path(os.environ.get("APPDATA", "")) / "Godot" / "app_userdata" / "Coin Collector" / "events.jsonl"
+
+
+def load_validators() -> dict[int, Draft202012Validator]:
+    validators = {}
+    for path in sorted(SCHEMA_DIR.glob("events.v*.schema.json")):
+        version = int(path.name.split(".")[1][1:])
+        validators[version] = Draft202012Validator(json.loads(path.read_text(encoding="utf-8")))
+    return validators
 
 
 def main() -> int:
@@ -24,7 +31,7 @@ def main() -> int:
         print(f"File not found: {log_path}")
         return 2
 
-    validator = Draft202012Validator(json.loads(SCHEMA_PATH.read_text(encoding="utf-8")))
+    validators = load_validators()
     problems: list[str] = []
     rounds: dict[str, list[dict]] = defaultdict(list)
     sessions: dict[str, list[str]] = defaultdict(list)
@@ -39,7 +46,11 @@ def main() -> int:
         except json.JSONDecodeError as error:
             problems.append(f"line {number}: invalid JSON ({error.msg})")
             continue
-        errors = sorted(validator.iter_errors(event), key=lambda e: list(e.path))
+        version = event.get("schema_version") if isinstance(event, dict) else None
+        if version not in validators:
+            problems.append(f"line {number}: unsupported schema_version {version!r} (known: {sorted(validators)})")
+            continue
+        errors = sorted(validators[version].iter_errors(event), key=lambda e: list(e.path))
         for error in errors:
             where = ".".join(str(p) for p in error.path) or "<root>"
             problems.append(f"line {number}: {where}: {error.message}")
@@ -56,7 +67,9 @@ def main() -> int:
             problems.append(f"session {session_id[:8]}: more than one session_end")
 
     for round_id, events in rounds.items():
-        problems.extend(check_round(round_id[:8], events))
+        label = round_id[:8]
+        check = check_round_v1 if events[0]["schema_version"] == 1 else check_round_v2
+        problems.extend(check(label, events))
 
     print(f"{total} events, {len(sessions)} sessions, {len(rounds)} rounds")
     if problems:
@@ -68,29 +81,72 @@ def main() -> int:
     return 0
 
 
-def check_round(label: str, events: list[dict]) -> list[str]:
+def check_common(label: str, events: list[dict]) -> list[str]:
+    """Checks shared by every version: framing, single start/end, ordered times."""
     problems = []
     names = [e["evento"] for e in events]
     if names[0] != "round_start":
         problems.append(f"round {label}: first event is {names[0]}, expected round_start")
-    for name in ("round_start", "round_end", "player_death"):
+    for name in ("round_start", "round_end"):
         if names.count(name) > 1:
             problems.append(f"round {label}: more than one {name}")
     if "round_end" not in names:
         problems.append(f"round {label}: no round_end")
-        return problems
-    if names[-1] != "round_end":
+    elif names[-1] != "round_end":
         problems.append(f"round {label}: events after round_end")
-    if "player_death" in names and names.index("player_death") > names.index("round_end"):
-        problems.append(f"round {label}: player_death after round_end")
-
-    end = events[names.index("round_end")]["valor"]
-    for field, event_name in (("coins_collected", "coin_collect"), ("position_samples", "player_position")):
-        if end[field] != names.count(event_name):
-            problems.append(f"round {label}: round_end.{field}={end[field]} but {names.count(event_name)} {event_name} events")
     times = [e["valor"]["t"] for e in events]
     if times != sorted(times):
         problems.append(f"round {label}: event times are not non-decreasing")
+    return problems
+
+
+def count_mismatches(label: str, events: list[dict], pairs: tuple[tuple[str, str], ...]) -> list[str]:
+    names = [e["evento"] for e in events]
+    if "round_end" not in names:
+        return []
+    end = events[names.index("round_end")]["valor"]
+    return [
+        f"round {label}: round_end.{field}={end[field]} but {names.count(event_name)} {event_name} events"
+        for field, event_name in pairs
+        if end[field] != names.count(event_name)
+    ]
+
+
+def check_round_v1(label: str, events: list[dict]) -> list[str]:
+    """Arena version: at most one death, which comes before round_end."""
+    problems = check_common(label, events)
+    names = [e["evento"] for e in events]
+    if names.count("player_death") > 1:
+        problems.append(f"round {label}: more than one player_death")
+    problems.extend(count_mismatches(label, events, (("coins_collected", "coin_collect"), ("position_samples", "player_position"))))
+    return problems
+
+
+def check_round_v2(label: str, events: list[dict]) -> list[str]:
+    """Platformer version: each death is followed by a respawn that restores every coin."""
+    problems = check_common(label, events)
+    names = [e["evento"] for e in events]
+    problems.extend(count_mismatches(label, events, (
+        ("coins_collected", "coin_collect"),
+        ("position_samples", "player_position"),
+        ("jumps", "player_jump"),
+        ("deaths", "player_death"),
+    )))
+    if names.count("player_death") != names.count("player_respawn"):
+        problems.append(f"round {label}: {names.count('player_death')} deaths but {names.count('player_respawn')} respawns")
+
+    # Each attempt (initial start or respawn) spawns every coin exactly once.
+    spawns = [e["valor"]["coin_id"] for e in events if e["evento"] == "coin_spawn"]
+    attempts = 1 + names.count("player_respawn")
+    if "round_end" in names:
+        total = events[names.index("round_end")]["valor"]["coins_total"]
+        if len(spawns) != total * attempts:
+            problems.append(f"round {label}: {len(spawns)} coin_spawn events, expected {total} x {attempts} attempts")
+        if any(spawns.count(i) != attempts for i in range(total)):
+            problems.append(f"round {label}: coin_ids are not spawned once per attempt")
+        end = events[names.index("round_end")]["valor"]
+        if end["completed"] and end["coins_collected"] < total:
+            problems.append(f"round {label}: completed but only {end['coins_collected']} of {total} coins collected")
     return problems
 
 

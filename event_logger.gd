@@ -4,7 +4,7 @@ extends RefCounted
 ## Every line: {"timestamp", "evento", "valor", "session_id", "round_id", "schema_version"}.
 
 const LOG_PATH := "user://events.jsonl"
-const SCHEMA_VERSION := 1
+const SCHEMA_VERSION := 2
 
 var session_id: String = _uuid4()
 var round_id: Variant = null

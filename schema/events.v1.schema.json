@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://github.com/LutherNogueira/coin-collector/schema/events.schema.json",
-  "title": "Coin Collector event",
+  "$id": "https://github.com/LutherNogueira/coin-collector/schema/events.v1.schema.json",
+  "title": "Coin Collector event (schema_version 1)",
   "description": "One line of events.jsonl. Top-level fields are common to every event; `valor` depends on `evento`.",
   "type": "object",
   "required": ["timestamp", "evento", "valor", "session_id", "round_id", "schema_version"],

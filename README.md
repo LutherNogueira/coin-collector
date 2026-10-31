@@ -1,20 +1,21 @@
 # Coin Collector
 
-A small 2D game built with Godot in which the player collects coins while dodging obstacles. Every action is recorded to a [JSON Lines](https://jsonlines.org/) file following a documented schema, and a Python validator checks that the recorded data is consistent.
+A small 2D platformer built with Godot in which the player collects coins while avoiding traps. Every action is recorded to a [JSON Lines](https://jsonlines.org/) file following a documented schema, and a Python validator checks that the recorded data is consistent.
 
 ## Gameplay
 
-- Move the blue square with **WASD** or the **arrow keys**.
-- Collect the yellow coin; a new one appears at a random position each time. One coin is on screen at a time.
-- Red obstacles cross the arena in straight lines (a new one every 2 seconds). Touching one kills you — you have one life.
-- A round lasts 30 seconds and ends on death or when time runs out. Press **Enter** to play again.
+- Move the blue square with **A/D** or the **left/right arrows**. Jump with **W**, **Space** or the **up arrow**.
+- Collect all 7 coins. They sit at fixed places in a single fixed level.
+- Gray blocks are solid: you can stand on them and cannot pass through them.
+- Red spikes are traps, and falling into a gap in the ground is also fatal. Dying puts you back at the start of the level with every coin restored, and the round keeps going.
+- There is no time limit. The round is complete when you have collected every coin in one attempt. Press **Enter** to play again.
 
 ## Event log
 
 Events are appended to `user://events.jsonl` (on Windows: `%APPDATA%\Godot\app_userdata\Coin Collector\events.jsonl`), one JSON object per line:
 
 ```json
-{"timestamp":"2026-10-28T19:32:17.611Z","evento":"coin_spawn","valor":{"t":0.0,"x":427.2,"y":259.4},"session_id":"c3b168bd-9f69-42a4-803e-41bf7f801b86","round_id":"1ddcca79-8140-4658-ba2b-5755f4fb2299","schema_version":1}
+{"timestamp":"2026-10-31T02:28:52.895Z","evento":"player_death","valor":{"cause":"trap","t":0.208,"x":90.0,"y":528.0},"session_id":"ee975668-b7d3-4c8e-a82f-b5701c898b91","round_id":"f2e2d1fa-b0e6-4892-a5c6-9c80be8467fd","schema_version":2}
 ```
 
 | Field | Description |
@@ -24,24 +25,27 @@ Events are appended to `user://events.jsonl` (on Windows: `%APPDATA%\Godot\app_u
 | `valor` | Object whose fields depend on `evento` |
 | `session_id` | UUID of the game session (one program run) |
 | `round_id` | UUID of the round, or `null` for session events |
-| `schema_version` | Currently `1` |
+| `schema_version` | `2` for the platformer (`1` was the earlier arena version) |
 
-In `valor`, `t` is seconds since the round started; `x` and `y` are arena coordinates (0–800, 0–600).
+In `valor`, `t` is seconds since the round started, and `x`/`y` are level coordinates (800×600, y grows downward).
 
 | `evento` | Fired when | `valor` |
 |---|---|---|
 | `session_start` | the game starts | `{}` |
 | `round_start` | a round begins | `t` |
-| `coin_spawn` | a coin appears | `t`, `x`, `y` |
-| `coin_collect` | the player takes a coin | `t`, `x`, `y`, `dt` (seconds since that coin spawned) |
+| `coin_spawn` | a coin is placed, at round start and after every death | `t`, `coin_id`, `x`, `y` |
+| `coin_collect` | the player takes a coin | `t`, `coin_id`, `x`, `y`, `dt` (seconds since it last spawned) |
 | `player_position` | every 0.5 s during a round | `t`, `x`, `y` |
-| `player_death` | an obstacle hits the player | `t`, `x`, `y` |
-| `round_end` | the round finishes | `t`, `coins_collected`, `obstacles_spawned`, `position_samples`, `duration_s` |
+| `player_jump` | the player jumps | `t`, `x`, `y` |
+| `player_land` | the player lands after being airborne | `t`, `x`, `y`, `vy` (impact speed, px/s) |
+| `player_death` | a trap is touched or the player falls into a pit | `t`, `x`, `y`, `cause` (`trap` or `pit`) |
+| `player_respawn` | right after a death, at the start point | `t`, `x`, `y` |
+| `round_end` | the round finishes or the window is closed | `t`, `completed`, `coins_collected`, `coins_total`, `deaths`, `jumps`, `position_samples`, `duration_s` |
 | `session_end` | the window is closed | `{}` |
 
-`round_end` has no reason field: a round ended by death contains a `player_death` event, otherwise it ended by timeout. Closing the window mid-round also writes a `round_end` (with `duration_s` below 30) before `session_end`.
+`round_end.coins_collected` counts every `coin_collect` in the round, across attempts. `completed` is `false` when the window was closed before all coins were collected.
 
-The formal definition is [`schema/events.schema.json`](schema/events.schema.json) (JSON Schema 2020-12). The design decision behind the object-valued `valor` is recorded in [`docs/adr/0001-event-payload-is-an-object-per-event-type.md`](docs/adr/0001-event-payload-is-an-object-per-event-type.md), and domain terms are defined in [`GLOSSARY.md`](GLOSSARY.md).
+The formal definitions are [`schema/events.v2.schema.json`](schema/events.v2.schema.json) and [`schema/events.v1.schema.json`](schema/events.v1.schema.json) (JSON Schema 2020-12). Design decisions are recorded in [`docs/adr/`](docs/adr/), and domain terms in [`GLOSSARY.md`](GLOSSARY.md).
 
 ## Validating the data
 
@@ -51,11 +55,12 @@ python -m venv .venv
 .venv/Scripts/python validate_events.py [path/to/events.jsonl]
 ```
 
-Without an argument it reads the default Windows log path. Besides checking every line against the schema, it verifies per round that:
+Without an argument it reads the default Windows log path. Each line is checked against the schema for its own `schema_version`, so logs from both versions validate. On top of the schema it verifies per round that:
 
-- the round starts once and ends at most once, with at most one death;
-- the `round_end` counters match the number of `coin_collect` and `player_position` events;
-- event times never go backwards.
+- the round starts once, ends once, and event times never go backwards;
+- the `round_end` counters match the recorded `coin_collect`, `player_position`, `player_jump` and `player_death` events;
+- every death is followed by a respawn, and every attempt spawns each coin exactly once;
+- a round marked `completed` collected all of its coins.
 
 It exits with `0` when everything passes and `1` when there are problems.
 
@@ -70,9 +75,9 @@ It exits with `0` when everything passes and `1` when there are problems.
 | File | Purpose |
 |---|---|
 | `project.godot`, `main.tscn` | Project settings and main scene (a single `Node2D` with a script) |
-| `main.gd` | Game logic and drawing with native shapes; `_step()` is input-free so it can be simulated |
+| `main.gd` | Level data, physics, game rules and drawing with native shapes; `_step()` is input-free so it can be simulated |
 | `event_logger.gd` | `EventLogger`: adds ids, timestamp and schema version, appends one JSON line |
-| `schema/events.schema.json` | JSON Schema for one log line |
+| `schema/` | JSON Schema for one log line, per `schema_version` |
 | `validate_events.py` | Schema and consistency validator |
 | `GLOSSARY.md`, `docs/adr/` | Domain language and design decisions |
 
