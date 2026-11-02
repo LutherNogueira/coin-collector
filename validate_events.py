@@ -1,7 +1,7 @@
 """Validate an events.jsonl file against the schema matching each line's `schema_version`.
 
 Besides the JSON Schema check on every line, it verifies per-round consistency
-(see `check_round_v1` and `check_round_v2`).
+(see `check_round_v1` and `check_round_platformer`).
 
 Usage: python validate_events.py [path/to/events.jsonl]
 """
@@ -68,7 +68,7 @@ def main() -> int:
 
     for round_id, events in rounds.items():
         label = round_id[:8]
-        check = check_round_v1 if events[0]["schema_version"] == 1 else check_round_v2
+        check = check_round_v1 if events[0]["schema_version"] == 1 else check_round_platformer
         problems.extend(check(label, events))
 
     print(f"{total} events, {len(sessions)} sessions, {len(rounds)} rounds")
@@ -122,8 +122,8 @@ def check_round_v1(label: str, events: list[dict]) -> list[str]:
     return problems
 
 
-def check_round_v2(label: str, events: list[dict]) -> list[str]:
-    """Platformer version: each death is followed by a respawn that restores every coin."""
+def check_round_platformer(label: str, events: list[dict]) -> list[str]:
+    """Versions 2 and 3: each death is followed by a respawn that restores every coin in place."""
     problems = check_common(label, events)
     names = [e["evento"] for e in events]
     problems.extend(count_mismatches(label, events, (
@@ -144,6 +144,13 @@ def check_round_v2(label: str, events: list[dict]) -> list[str]:
             problems.append(f"round {label}: {len(spawns)} coin_spawn events, expected {total} x {attempts} attempts")
         if any(spawns.count(i) != attempts for i in range(total)):
             problems.append(f"round {label}: coin_ids are not spawned once per attempt")
+        positions: dict[int, set[tuple[float, float]]] = defaultdict(set)
+        for e in events:
+            if e["evento"] == "coin_spawn":
+                positions[e["valor"]["coin_id"]].add((e["valor"]["x"], e["valor"]["y"]))
+        moved = sorted(i for i, spots in positions.items() if len(spots) > 1)
+        if moved:
+            problems.append(f"round {label}: coins {moved} spawn at different places in different attempts")
         end = events[names.index("round_end")]["valor"]
         if end["completed"] and end["coins_collected"] < total:
             problems.append(f"round {label}: completed but only {end['coins_collected']} of {total} coins collected")

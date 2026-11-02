@@ -1,0 +1,187 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/LutherNogueira/coin-collector/schema/events.v3.schema.json",
+  "title": "Coin Collector event (schema_version 3)",
+  "description": "One line of events.jsonl for the platformer with generated levels. Top-level fields are common to every event; `valor` depends on `evento`.",
+  "type": "object",
+  "required": ["timestamp", "evento", "valor", "session_id", "round_id", "schema_version"],
+  "additionalProperties": false,
+  "properties": {
+    "timestamp": {
+      "description": "UTC wall-clock time, ISO 8601 with milliseconds.",
+      "type": "string",
+      "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}\\.\\d{3}Z$"
+    },
+    "evento": {
+      "enum": [
+        "session_start", "session_end", "round_start", "coin_spawn", "coin_collect", "player_position",
+        "player_jump", "player_land", "player_death", "player_respawn", "round_end"
+      ]
+    },
+    "valor": { "type": "object" },
+    "session_id": { "$ref": "#/$defs/uuid" },
+    "round_id": {
+      "description": "UUID of the round, or null for session-level events.",
+      "oneOf": [{ "$ref": "#/$defs/uuid" }, { "type": "null" }]
+    },
+    "schema_version": { "const": 3 }
+  },
+  "allOf": [
+    {
+      "if": { "properties": { "evento": { "enum": ["session_start", "session_end"] } } },
+      "then": {
+        "properties": {
+          "round_id": { "type": "null" },
+          "valor": { "type": "object", "additionalProperties": false }
+        }
+      },
+      "else": {
+        "properties": { "round_id": { "$ref": "#/$defs/uuid" } }
+      }
+    },
+    {
+      "if": { "properties": { "evento": { "const": "round_start" } } },
+      "then": {
+        "properties": {
+          "valor": {
+            "type": "object",
+            "required": ["t", "level_seed"],
+            "additionalProperties": false,
+            "properties": {
+              "t": { "const": 0 },
+              "level_seed": { "description": "Seed of the level played in this round. 0 is the hand-made level; any other value regenerates the same level.", "type": "integer", "minimum": 0, "maximum": 2147483647 }
+            }
+          }
+        }
+      }
+    },
+    {
+      "if": { "properties": { "evento": { "enum": ["player_position", "player_jump", "player_respawn"] } } },
+      "then": {
+        "properties": {
+          "valor": {
+            "type": "object",
+            "required": ["t", "x", "y"],
+            "additionalProperties": false,
+            "properties": {
+              "t": { "$ref": "#/$defs/round_time" },
+              "x": { "$ref": "#/$defs/player_x" },
+              "y": { "$ref": "#/$defs/player_y" }
+            }
+          }
+        }
+      }
+    },
+    {
+      "if": { "properties": { "evento": { "const": "player_land" } } },
+      "then": {
+        "properties": {
+          "valor": {
+            "type": "object",
+            "required": ["t", "x", "y", "vy"],
+            "additionalProperties": false,
+            "properties": {
+              "t": { "$ref": "#/$defs/round_time" },
+              "x": { "$ref": "#/$defs/player_x" },
+              "y": { "$ref": "#/$defs/player_y" },
+              "vy": { "description": "Downward speed at impact, px/s.", "type": "number", "minimum": 0 }
+            }
+          }
+        }
+      }
+    },
+    {
+      "if": { "properties": { "evento": { "const": "player_death" } } },
+      "then": {
+        "properties": {
+          "valor": {
+            "type": "object",
+            "required": ["t", "x", "y", "cause"],
+            "additionalProperties": false,
+            "properties": {
+              "t": { "$ref": "#/$defs/round_time" },
+              "x": { "$ref": "#/$defs/player_x" },
+              "y": { "$ref": "#/$defs/player_y" },
+              "cause": { "description": "`trap`: touched a trap. `pit`: fell into a gap in the ground.", "enum": ["trap", "pit"] }
+            }
+          }
+        }
+      }
+    },
+    {
+      "if": { "properties": { "evento": { "const": "coin_spawn" } } },
+      "then": {
+        "properties": {
+          "valor": {
+            "type": "object",
+            "required": ["t", "coin_id", "x", "y"],
+            "additionalProperties": false,
+            "properties": {
+              "t": { "$ref": "#/$defs/round_time" },
+              "coin_id": { "$ref": "#/$defs/coin_id" },
+              "x": { "$ref": "#/$defs/arena_x" },
+              "y": { "$ref": "#/$defs/arena_y" }
+            }
+          }
+        }
+      }
+    },
+    {
+      "if": { "properties": { "evento": { "const": "coin_collect" } } },
+      "then": {
+        "properties": {
+          "valor": {
+            "type": "object",
+            "required": ["t", "coin_id", "x", "y", "dt"],
+            "additionalProperties": false,
+            "properties": {
+              "t": { "$ref": "#/$defs/round_time" },
+              "coin_id": { "$ref": "#/$defs/coin_id" },
+              "x": { "$ref": "#/$defs/arena_x" },
+              "y": { "$ref": "#/$defs/arena_y" },
+              "dt": { "description": "Seconds since this coin last spawned (the level start or restart).", "type": "number", "minimum": 0 }
+            }
+          }
+        }
+      }
+    },
+    {
+      "if": { "properties": { "evento": { "const": "round_end" } } },
+      "then": {
+        "properties": {
+          "valor": {
+            "type": "object",
+            "required": ["t", "completed", "coins_collected", "coins_total", "deaths", "jumps", "position_samples", "duration_s"],
+            "additionalProperties": false,
+            "properties": {
+              "t": { "$ref": "#/$defs/round_time" },
+              "completed": { "description": "True when every coin was collected in the final attempt; false when the window was closed first.", "type": "boolean" },
+              "coins_collected": { "description": "Total coin_collect events in the round, across all attempts.", "type": "integer", "minimum": 0 },
+              "coins_total": { "description": "Number of coins in the level.", "type": "integer", "minimum": 1 },
+              "deaths": { "type": "integer", "minimum": 0 },
+              "jumps": { "type": "integer", "minimum": 0 },
+              "position_samples": { "type": "integer", "minimum": 0 },
+              "duration_s": { "$ref": "#/$defs/round_time" }
+            }
+          }
+        }
+      }
+    }
+  ],
+  "$defs": {
+    "uuid": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+    },
+    "round_time": {
+      "description": "Seconds since the round started. A round has no time limit.",
+      "type": "number",
+      "minimum": 0
+    },
+    "coin_id": { "type": "integer", "minimum": 0 },
+    "arena_x": { "type": "number", "minimum": 0, "maximum": 800 },
+    "arena_y": { "type": "number", "minimum": 0, "maximum": 600 },
+    "player_x": { "type": "number", "minimum": 0, "maximum": 800 },
+    "player_y": { "description": "May exceed the arena height while falling into a pit.", "type": "number", "minimum": -200, "maximum": 800 }
+  }
+}

@@ -1,6 +1,6 @@
 # Coin Collector
 
-A small 2D platformer in which the player collects coins in a fixed level while avoiding traps, and whose every action is recorded as an analyzable event stream.
+A small 2D platformer in which the player collects coins in a one-screen level while avoiding traps, and whose every action is recorded as an analyzable event stream.
 
 ## Language
 
@@ -17,15 +17,19 @@ One go at the level inside a Round. A new Attempt begins at the start of the Rou
 _Avoid_: Life, try
 
 **Level**:
-The fixed layout of Solids, Traps and Coins that every Attempt plays through.
+The layout of Solids, Traps and Coins that every Attempt of a Round plays through. Level 0 is hand-made; every other Level is generated from a Seed.
 _Avoid_: Map, stage, fase
+
+**Seed**:
+The integer that determines a generated Level. The same Seed always gives the same Level, and 0 stands for the hand-made one.
+_Avoid_: Level id, random number
 
 **Player**:
 The square the user moves and makes jump.
 _Avoid_: Character, avatar
 
 **Coin**:
-A collectible at a fixed place in the Level. A Round is complete when all of them have been collected in a single Attempt.
+A collectible at a fixed place in its Level. A Round is complete when all of them have been collected in a single Attempt.
 _Avoid_: Pickup, token
 
 **Solid**:

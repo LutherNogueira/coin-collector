@@ -4,8 +4,10 @@ extends RefCounted
 ## Every line: {"timestamp", "evento", "valor", "session_id", "round_id", "schema_version"}.
 
 const LOG_PATH := "user://events.jsonl"
-const SCHEMA_VERSION := 2
+const SCHEMA_VERSION := 3
 
+## Where events are appended; tests point this at their own file.
+var log_path := LOG_PATH
 var session_id: String = _uuid4()
 var round_id: Variant = null
 
@@ -27,16 +29,16 @@ func log_event(evento: String, valor: Dictionary = {}) -> void:
 		"round_id": round_id,
 		"schema_version": SCHEMA_VERSION,
 	})
-	var file := FileAccess.open(LOG_PATH, FileAccess.READ_WRITE if FileAccess.file_exists(LOG_PATH) else FileAccess.WRITE)
+	var file := FileAccess.open(log_path, FileAccess.READ_WRITE if FileAccess.file_exists(log_path) else FileAccess.WRITE)
 	if file == null:
-		push_error("Could not open %s (error %d)" % [LOG_PATH, FileAccess.get_open_error()])
+		push_error("Could not open %s (error %d)" % [log_path, FileAccess.get_open_error()])
 		return
 	file.seek_end()
 	file.store_line(line)
 
 
 func absolute_path() -> String:
-	return ProjectSettings.globalize_path(LOG_PATH)
+	return ProjectSettings.globalize_path(log_path)
 
 
 func _timestamp() -> String:
