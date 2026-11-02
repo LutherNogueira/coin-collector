@@ -20,3 +20,12 @@ All images here come, unmodified, from **Pixel Adventure 1** by Pixel Frog:
 
 `sounds/*.wav` (jump, collect, death, win) are synthesized by `tools/generate_sfx.py` from plain square, triangle,
 saw and noise waves. They are original to this project and contain no third-party audio.
+
+## Music
+
+`music/jungle_prince.mp3` is **"Jungle Prince"** by iamoneabe, unmodified.
+
+- Source: <https://opengameart.org/content/jungle-prince>
+- License: CC0 (public domain), as listed on the page, which also says no attribution is necessary.
+  Credit is given anyway. The file's own ID3 tag names the artist "Aron Elal" (2022).
+- 2.2 MB MP3, about 55 s, tagged as loopable on the page. The game loops it in code.

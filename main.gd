@@ -32,6 +32,7 @@ var jump_was_down := false
 func _ready() -> void:
 	# Child order is draw order: background, level, player, then the HUD on top.
 	add_child(ScrollingBackground.new())
+	add_child(Music.new())
 	sfx = Sfx.new()
 	add_child(sfx)
 	level_view = LevelView.new()
