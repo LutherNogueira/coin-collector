@@ -44,6 +44,20 @@ def concat(*parts: list[float]) -> list[float]:
     return [s for part in parts for s in part]
 
 
+def lowpass(samples: list[float], alpha: float) -> list[float]:
+    """One-pole low-pass filter (smaller alpha = darker, more muffled)."""
+    out = []
+    state = 0.0
+    for s in samples:
+        state += alpha * (s - state)
+        out.append(state)
+    return out
+
+
+def delay(samples: list[float], seconds: float) -> list[float]:
+    return [0.0] * int(seconds * RATE) + samples
+
+
 def write(name: str, samples: list[float]) -> None:
     peak = max(abs(s) for s in samples) or 1.0
     scale = 0.6 / peak   # leave headroom
@@ -61,7 +75,14 @@ def main() -> None:
 
     write("jump", voice("square", 260, 620, 0.16, 1.0))
 
-    write("collect", concat(voice("square", 988, 988, 0.06, 1.0), voice("square", 1319, 1319, 0.18, 1.0)))
+    # A bite into a fruit: three soft crunches (filtered noise bursts), then a juicy "pop" gliding upward.
+    crunch_rng = random.Random(11)   # its own generator, so it never changes the noise used by `death`
+    crunches = [
+        delay(lowpass(voice("noise", 0, 0, 0.035, volume, attack=0.001, rng=crunch_rng), 0.4), start)
+        for start, volume in [(0.0, 1.0), (0.045, 0.8), (0.085, 0.55)]
+    ]
+    pop = delay(voice("triangle", 350, 900, 0.09, 0.9), 0.12)
+    write("collect", mix(*crunches, pop))
 
     write("death", mix(voice("saw", 440, 90, 0.45, 1.0), voice("noise", 0, 0, 0.30, 0.45, rng=rng)))
 
