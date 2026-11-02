@@ -49,7 +49,7 @@ A gap in the ground. Falling below the Level kills the Player.
 _Avoid_: Hole, void
 
 **Death**:
-The Player touching a Trap or falling into a Pit. It ends the Attempt and starts a new one.
+The Player touching a Trap or falling into a Pit. It ends the Attempt; a new one starts after a short pause during which the Player is dead and the round clock keeps running.
 _Avoid_: Game over, hit
 
 **Event**:

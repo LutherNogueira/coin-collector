@@ -6,7 +6,7 @@ A small 2D platformer built with Godot in which the player collects coins while 
 
 - Move the blue square with **A/D** or the **left/right arrows**. Jump with **W**, **Space** or the **up arrow**.
 - Collect every coin (the fruits) in the level. Grass-topped blocks are solid: you can stand on them and cannot pass through them.
-- Spikes are traps (only the visible spike tips kill), and falling into a gap in the ground is also fatal. Dying puts you back at the start of the level with every coin restored, and the round keeps going.
+- Spikes are traps (only the visible spike tips kill), and falling into a gap in the ground is also fatal. Dying plays a short "hit" animation, then after 0.6 seconds puts you back at the start of the level with every coin restored, and the round keeps going.
 - There is no time limit. The round is complete when you have collected every coin in one attempt. Press **Enter** for a new level.
 - The first round of a session plays the hand-made level (level 0). Every later round plays a randomly generated one; its seed is shown in the corner.
 - Everything is drawn with pixel art from the Pixel Adventure pack: the player faces the direction of movement and switches between idle, run, jump and fall animations (a short "hit" animation plays where you die), coins are animated fruits with a burst when collected, the terrain uses grass-topped tiles, and a tiled sky background drifts slowly behind. Background music loops during play, and jumping, collecting a fruit, dying and finishing a level each play a sound effect; **M** mutes everything. **F1** shows the real collision shapes (player box, spike hitboxes, coin circles), which are independent of the art.
@@ -51,7 +51,7 @@ In `valor`, `t` is seconds since the round started, and `x`/`y` are level coordi
 | `player_jump` | the player jumps | `t`, `x`, `y` |
 | `player_land` | the player lands after being airborne | `t`, `x`, `y`, `vy` (impact speed, px/s) |
 | `player_death` | a trap is touched or the player falls into a pit | `t`, `x`, `y`, `cause` (`trap` or `pit`) |
-| `player_respawn` | right after a death, at the start point | `t`, `x`, `y` |
+| `player_respawn` | at the start point, 0.6 s after a death | `t`, `x`, `y` |
 | `round_end` | the round finishes or the window is closed | `t`, `completed`, `coins_collected`, `coins_total`, `deaths`, `jumps`, `position_samples`, `duration_s` |
 | `session_end` | the window is closed | `{}` |
 
@@ -71,7 +71,8 @@ Without an argument it reads the default Windows log path. Each line is checked 
 
 - the round starts once, ends once, and event times never go backwards;
 - the `round_end` counters match the recorded `coin_collect`, `player_position`, `player_jump` and `player_death` events;
-- every death is followed by a respawn, and every attempt spawns each coin exactly once, at the same place;
+- every death is followed by a respawn, and nothing but `coin_spawn` is recorded while the player is dead;
+- every attempt spawns each coin exactly once, at the same place;
 - a round marked `completed` collected all of its coins.
 
 It exits with `0` when everything passes and `1` when there are problems.

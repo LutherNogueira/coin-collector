@@ -132,6 +132,14 @@ def check_round_platformer(label: str, events: list[dict]) -> list[str]:
         ("jumps", "player_jump"),
         ("deaths", "player_death"),
     )))
+    dead = False
+    for name in names:
+        if name == "player_death":
+            dead = True
+        elif name == "player_respawn":
+            dead = False
+        elif dead and name not in ("coin_spawn", "round_end"):
+            problems.append(f"round {label}: {name} recorded while the player was dead")
     if names.count("player_death") != names.count("player_respawn"):
         problems.append(f"round {label}: {names.count('player_death')} deaths but {names.count('player_respawn')} respawns")
 

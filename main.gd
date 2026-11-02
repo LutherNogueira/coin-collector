@@ -2,8 +2,10 @@ extends Node2D
 
 const COIN_RADIUS := 12.0
 const SAMPLE_INTERVAL := 0.5
+## Seconds between a death and the player reappearing at the start. The round clock keeps running.
+const DEATH_DELAY := 0.6
 
-enum State { PLAYING, ENDED }
+enum State { PLAYING, DYING, ENDED }
 
 var logger := EventLogger.new()
 var state := State.PLAYING
@@ -17,6 +19,7 @@ var sfx: Sfx
 var show_hitbox := false
 var t := 0.0
 var next_sample_t := SAMPLE_INTERVAL
+var respawn_timer := 0.0
 var collected: Array[bool] = []
 var coin_spawn_t: Array[float] = []
 
@@ -67,7 +70,7 @@ func _unhandled_input(event: InputEvent) -> void:
 
 func _notification(what: int) -> void:
 	if what == NOTIFICATION_WM_CLOSE_REQUEST:
-		if state == State.PLAYING:
+		if state != State.ENDED:
 			_end_round()
 		logger.log_event("session_end")
 
@@ -83,7 +86,7 @@ func _read_move_x() -> float:
 
 ## The first round of a session plays the hand-made level (seed 0); later rounds get a random seed.
 func _start_round() -> void:
-	if state == State.PLAYING and logger.round_id != null:
+	if state != State.ENDED and logger.round_id != null:
 		_end_round()
 	var level_seed := 0 if rounds_started == 0 else randi_range(1, 2147483647)
 	rounds_started += 1
@@ -97,6 +100,7 @@ func _start_round() -> void:
 	position_samples = 0
 	completed = false
 	state = State.PLAYING
+	view.visible = true
 	logger.new_round()
 	logger.log_event("round_start", {"t": 0.0, "level_seed": level_seed, "generator_version": Level.GENERATOR_VERSION})
 	_reset_level()
@@ -118,11 +122,30 @@ func _reset_level() -> void:
 func _step(delta: float, move_x: float, jump_pressed: bool) -> void:
 	var remaining := delta
 	var jump := jump_pressed
-	while remaining > 0.0 and state == State.PLAYING:
+	while remaining > 0.0 and state != State.ENDED:
 		var h := minf(remaining, PlatformPhysics.SUBSTEP)
 		remaining -= h
-		_substep(h, move_x, jump)
+		if state == State.DYING:
+			_dying_substep(h)
+		else:
+			_substep(h, move_x, jump)
 		jump = false
+
+
+## The player is dead: nothing moves or is recorded until the delay is over.
+func _dying_substep(h: float) -> void:
+	t += h
+	respawn_timer -= h
+	if respawn_timer <= 0.0:
+		_respawn()
+
+
+func _respawn() -> void:
+	_reset_level()
+	logger.log_event("player_respawn", _pos_payload())
+	next_sample_t = (floorf(t / SAMPLE_INTERVAL) + 1.0) * SAMPLE_INTERVAL   # no samples for the time spent dead
+	view.visible = true
+	state = State.PLAYING
 
 
 func _substep(h: float, move_x: float, jump_pressed: bool) -> void:
@@ -163,9 +186,10 @@ func _substep(h: float, move_x: float, jump_pressed: bool) -> void:
 		death["cause"] = cause
 		logger.log_event("player_death", death)
 		view.show_hit_at(self, body)
+		view.visible = false
 		sfx.play("death")
-		_reset_level()
-		logger.log_event("player_respawn", _pos_payload())
+		respawn_timer = DEATH_DELAY
+		state = State.DYING
 		return
 
 	if not collected.has(false):

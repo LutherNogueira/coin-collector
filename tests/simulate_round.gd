@@ -45,7 +45,12 @@ func _init() -> void:
 	_expect(main.level.seed_value == 0, "first round plays the hand-made level (seed 0)")
 
 	_run(0.3, 1.0)
-	_expect(main.deaths == 1 and main.body.pos.x < 100.0, "walking right hits the first trap and respawns at the start")
+	_expect(main.deaths == 1 and main.state == main.State.DYING, "walking right hits the first trap and the player is dead for a moment")
+	var death_pos: Vector2 = main.body.pos
+	_run(main.DEATH_DELAY / 2.0, 1.0)
+	_expect(main.state == main.State.DYING and main.body.pos == death_pos, "halfway through the delay the player is still dead and cannot move")
+	_run(main.DEATH_DELAY / 2.0 + 0.05, 0.0)
+	_expect(main.state == main.State.PLAYING and main.body.pos.is_equal_approx(Level.START_POS), "after the delay the player reappears at the start")
 
 	var block_rect: Rect2 = main.level.solids[3]   # the hand-made level's block on the middle ground
 	_teleport(Vector2(block_rect.position.x - 28.0, Level.START_POS.y))
