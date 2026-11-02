@@ -1,0 +1,65 @@
+name: Deploy web build
+
+# Exports the Godot project for web and deploys it to Vercel:
+# pushes to main go to production, pushes to dev become preview deployments.
+on:
+  push:
+    branches: [main, dev]
+  workflow_dispatch:
+
+concurrency:
+  group: deploy-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  GODOT_VERSION: "4.7.2"
+  # Set in the repository's Settings > Secrets and variables > Actions.
+  VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+  VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
+  VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Cache Godot and its web templates
+        id: godot-cache
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/godot
+            ~/.local/share/godot/export_templates
+          key: godot-${{ env.GODOT_VERSION }}-web
+
+      - name: Install Godot and the web export templates
+        if: steps.godot-cache.outputs.cache-hit != 'true'
+        run: |
+          mkdir -p ~/godot
+          curl -fsSL "https://downloads.godotengine.org/?version=${GODOT_VERSION}&flavor=stable&slug=linux.x86_64.zip&platform=linux.64" -o ~/godot/godot.zip
+          unzip -q ~/godot/godot.zip -d ~/godot
+          rm ~/godot/godot.zip
+          chmod +x ~/godot/Godot_v${GODOT_VERSION}-stable_linux.x86_64
+          python3 tools/fetch_web_templates.py --version "${GODOT_VERSION}" --dest ~/.local/share/godot/export_templates/${GODOT_VERSION}.stable
+
+      - name: Export the web build
+        run: |
+          GODOT=$(ls ~/godot/Godot_v${GODOT_VERSION}-stable_linux.x86_64)
+          mkdir -p build/web
+          "$GODOT" --headless --path . --import || true
+          "$GODOT" --headless --path . --export-release "Web" build/web/index.html
+          ls -la build/web
+          test -s build/web/index.html && test -s build/web/index.wasm && test -s build/web/index.pck
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Deploy to Vercel
+        run: |
+          npm install --global vercel@latest
+          if [ "${GITHUB_REF_NAME}" = "main" ]; then FLAGS="--prod"; else FLAGS=""; fi
+          URL=$(vercel deploy build/web $FLAGS --yes)
+          echo "Deployed ${GITHUB_REF_NAME}: ${URL}"
+          echo "Deployed \`${GITHUB_REF_NAME}\`: ${URL}" >> "$GITHUB_STEP_SUMMARY"
