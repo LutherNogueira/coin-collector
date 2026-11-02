@@ -10,6 +10,8 @@ var state := State.PLAYING
 
 var level: Level
 var body: PlatformPhysics.Body
+var view: PlayerView
+var show_hitbox := false
 var t := 0.0
 var next_sample_t := SAMPLE_INTERVAL
 var collected: Array[bool] = []
@@ -25,18 +27,24 @@ var jump_was_down := false
 
 
 func _ready() -> void:
+	view = PlayerView.new()
+	add_child(view)
 	logger.log_event("session_start")
 	_start_round()
 
 
 func _process(delta: float) -> void:
 	var jump_down := Input.is_key_pressed(KEY_W) or Input.is_key_pressed(KEY_SPACE) or Input.is_key_pressed(KEY_UP)
-	_step(delta, _read_move_x(), jump_down and not jump_was_down)
+	var move_x := _read_move_x()
+	_step(delta, move_x, jump_down and not jump_was_down)
 	jump_was_down = jump_down
+	view.sync_with(body, move_x)
 	queue_redraw()
 
 
 func _unhandled_input(event: InputEvent) -> void:
+	if event is InputEventKey and event.pressed and not event.echo and event.keycode == KEY_F1:
+		show_hitbox = not show_hitbox   # debug: outline of the collision box
 	if state == State.ENDED and event is InputEventKey and event.pressed and not event.echo \
 			and (event.keycode == KEY_ENTER or event.keycode == KEY_KP_ENTER):
 		_start_round()
@@ -134,6 +142,7 @@ func _substep(h: float, move_x: float, jump_pressed: bool) -> void:
 		var death := _pos_payload()
 		death["cause"] = cause
 		logger.log_event("player_death", death)
+		view.show_hit_at(self, body)
 		_reset_level()
 		logger.log_event("player_respawn", _pos_payload())
 		return
@@ -181,7 +190,8 @@ func _draw() -> void:
 	for i in level.coins.size():
 		if not collected[i]:
 			draw_circle(level.coins[i], COIN_RADIUS, Color(1.0, 0.82, 0.2))
-	draw_rect(body.rect(), Color(0.3, 0.8, 1.0))
+	if show_hitbox:
+		draw_rect(body.rect(), Color(0.3, 0.8, 1.0, 0.35))
 
 	var font := ThemeDB.fallback_font
 	draw_string(font, Vector2(12, 28), "Coins: %d/%d   Deaths: %d" % [collected.count(true), level.coins.size(), deaths], HORIZONTAL_ALIGNMENT_LEFT, -1, 22)

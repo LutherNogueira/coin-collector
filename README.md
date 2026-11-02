@@ -9,6 +9,7 @@ A small 2D platformer built with Godot in which the player collects coins while 
 - Red spikes are traps, and falling into a gap in the ground is also fatal. Dying puts you back at the start of the level with every coin restored, and the round keeps going.
 - There is no time limit. The round is complete when you have collected every coin in one attempt. Press **Enter** for a new level.
 - The first round of a session plays the hand-made level (level 0). Every later round plays a randomly generated one; its seed is shown in the corner.
+- The player is drawn with pixel-art sprites that face the direction of movement and switch between idle, run, jump and fall animations. A short "hit" animation plays where you die. **F1** toggles an outline of the collision box (24×24 px), which is independent of the sprite.
 
 ## Level generation
 
@@ -87,6 +88,8 @@ It exits with `0` when everything passes and `1` when there are problems.
 |---|---|
 | `project.godot`, `main.tscn` | Project settings and main scene (a single `Node2D` with a script) |
 | `main.gd` | Game rules, event logging and drawing with native shapes; `_step()` is input-free so it can be simulated |
+| `player_view.gd` | `PlayerView`: sprite animations and mirroring, driven by the physics body; purely visual |
+| `assets/` | Player sprites and their credits ([`assets/CREDITS.md`](assets/CREDITS.md)) |
 | `level.gd` | `Level`: the hand-made level and the seeded generator |
 | `platform_physics.gd` | `PlatformPhysics`: gravity, jumping and collisions as pure functions, shared by the game and the tests |
 | `event_logger.gd` | `EventLogger`: adds ids, timestamp and schema version, appends one JSON line |
@@ -94,6 +97,10 @@ It exits with `0` when everything passes and `1` when there are problems.
 | `validate_events.py` | Schema and consistency validator |
 | `tests/` | Headless level verifier and scripted-play simulation |
 | `GLOSSARY.md`, `docs/adr/` | Domain language and design decisions |
+
+## Credits
+
+Player sprites are the Ninja Frog from [Pixel Adventure 1](https://pixelfrog-assets.itch.io/pixel-adventure-1) by Pixel Frog (CC0). See [`assets/CREDITS.md`](assets/CREDITS.md).
 
 ## Built with
 
