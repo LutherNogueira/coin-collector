@@ -70,7 +70,7 @@ static func death_cause(body: Body, level: Level) -> String:
 	if body.pos.y - PLAYER_SIZE / 2.0 > Level.ARENA.y:
 		return "pit"
 	for trap: Rect2 in level.traps:
-		if body.rect().intersects(trap):
+		if body.rect().intersects(Level.trap_hitbox(trap)):
 			return "trap"
 	return ""
 

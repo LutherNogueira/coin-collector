@@ -4,7 +4,7 @@ extends RefCounted
 ## Every line: {"timestamp", "evento", "valor", "session_id", "round_id", "schema_version"}.
 
 const LOG_PATH := "user://events.jsonl"
-const SCHEMA_VERSION := 3
+const SCHEMA_VERSION := 4
 
 ## Where events are appended; tests point this at their own file.
 var log_path := LOG_PATH

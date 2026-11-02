@@ -63,11 +63,19 @@ func _structure_problems(level: Level) -> Array[String]:
 		for r in level.solids + level.traps:
 			if c.distance_to(c.clamp(r.position, r.end)) < Level.COIN_RADIUS:
 				problems.append("coin %s overlaps %s" % [c, r])
+	for r in level.solids + level.traps:
+		var bottom_ok := _on_grid(r.end.y) or is_equal_approx(r.end.y, Level.ARENA.y)   # the ground runs off the bottom
+		if not (_on_grid(r.position.x) and _on_grid(r.position.y) and _on_grid(r.size.x) and bottom_ok):
+			problems.append("%s is off the 16 px grid" % r)
 	var start := PlatformPhysics.Body.new(Level.START_POS)
 	for r in level.solids + level.traps:
 		if start.rect().intersects(r):
 			problems.append("start position overlaps %s" % r)
 	return problems
+
+
+func _on_grid(value: float) -> bool:
+	return is_zero_approx(fposmod(value, Level.TILE))
 
 
 ## Returns the indices of coins the simulated player cannot touch.

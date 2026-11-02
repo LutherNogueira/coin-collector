@@ -47,9 +47,10 @@ func _init() -> void:
 	_run(0.3, 1.0)
 	_expect(main.deaths == 1 and main.body.pos.x < 100.0, "walking right hits the first trap and respawns at the start")
 
-	_teleport(Vector2(420, 528))
+	var block_rect: Rect2 = main.level.solids[3]   # the hand-made level's block on the middle ground
+	_teleport(Vector2(block_rect.position.x - 28.0, Level.START_POS.y))
 	_run(1.0, 1.0)
-	_expect(is_equal_approx(main.body.pos.x, 428.0), "a solid block stops the player (x=%.1f)" % main.body.pos.x)
+	_expect(is_equal_approx(main.body.pos.x, block_rect.position.x - 12.0), "a solid block stops the player (x=%.1f)" % main.body.pos.x)
 
 	var deaths_before: int = main.deaths
 	_teleport(Vector2(340, 500), true)

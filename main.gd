@@ -10,7 +10,10 @@ var state := State.PLAYING
 
 var level: Level
 var body: PlatformPhysics.Body
+var level_view: LevelView
 var view: PlayerView
+var hud: Node2D
+var sfx: Sfx
 var show_hitbox := false
 var t := 0.0
 var next_sample_t := SAMPLE_INTERVAL
@@ -27,8 +30,17 @@ var jump_was_down := false
 
 
 func _ready() -> void:
+	# Child order is draw order: background, level, player, then the HUD on top.
+	add_child(ScrollingBackground.new())
+	sfx = Sfx.new()
+	add_child(sfx)
+	level_view = LevelView.new()
+	add_child(level_view)
 	view = PlayerView.new()
 	add_child(view)
+	hud = Node2D.new()
+	hud.draw.connect(_draw_hud)
+	add_child(hud)
 	logger.log_event("session_start")
 	_start_round()
 
@@ -39,12 +51,14 @@ func _process(delta: float) -> void:
 	_step(delta, move_x, jump_down and not jump_was_down)
 	jump_was_down = jump_down
 	view.sync_with(body, move_x)
-	queue_redraw()
+	hud.queue_redraw()
 
 
 func _unhandled_input(event: InputEvent) -> void:
 	if event is InputEventKey and event.pressed and not event.echo and event.keycode == KEY_F1:
 		show_hitbox = not show_hitbox   # debug: outline of the collision box
+	if event is InputEventKey and event.pressed and not event.echo and event.keycode == KEY_M:
+		sfx.toggle_mute()
 	if state == State.ENDED and event is InputEventKey and event.pressed and not event.echo \
 			and (event.keycode == KEY_ENTER or event.keycode == KEY_KP_ENTER):
 		_start_round()
@@ -73,6 +87,7 @@ func _start_round() -> void:
 	var level_seed := 0 if rounds_started == 0 else randi_range(1, 2147483647)
 	rounds_started += 1
 	level = Level.hand_made() if level_seed == 0 else Level.generate(level_seed)
+	level_view.show_level(level)
 	t = 0.0
 	next_sample_t = SAMPLE_INTERVAL
 	coins_collected = 0
@@ -82,13 +97,14 @@ func _start_round() -> void:
 	completed = false
 	state = State.PLAYING
 	logger.new_round()
-	logger.log_event("round_start", {"t": 0.0, "level_seed": level_seed})
+	logger.log_event("round_start", {"t": 0.0, "level_seed": level_seed, "generator_version": Level.GENERATOR_VERSION})
 	_reset_level()
 
 
 ## Puts the player back at the start and restores every coin.
 func _reset_level() -> void:
 	body = PlatformPhysics.Body.new(Level.START_POS)
+	level_view.restore_coins()
 	collected.clear()
 	coin_spawn_t.clear()
 	for i in level.coins.size():
@@ -113,6 +129,7 @@ func _substep(h: float, move_x: float, jump_pressed: bool) -> void:
 	var result := PlatformPhysics.step(body, level, h, move_x, jump_pressed)
 	if result["jumped"]:
 		jumps += 1
+		sfx.play("jump")
 		var from: Vector2 = result["jump_pos"]
 		logger.log_event("player_jump", {"t": _r(t, 0.001), "x": _r(from.x), "y": _r(from.y)})
 	if result["landing_speed"] > 0.0:
@@ -131,6 +148,8 @@ func _substep(h: float, move_x: float, jump_pressed: bool) -> void:
 		if not collected[i] and PlatformPhysics.circle_hits(body, level.coins[i], COIN_RADIUS):
 			collected[i] = true
 			coins_collected += 1
+			level_view.collect(i)
+			sfx.play("collect")
 			logger.log_event("coin_collect", {
 				"t": _r(t, 0.001), "coin_id": i, "x": _r(level.coins[i].x), "y": _r(level.coins[i].y),
 				"dt": _r(t - coin_spawn_t[i], 0.001),
@@ -143,12 +162,14 @@ func _substep(h: float, move_x: float, jump_pressed: bool) -> void:
 		death["cause"] = cause
 		logger.log_event("player_death", death)
 		view.show_hit_at(self, body)
+		sfx.play("death")
 		_reset_level()
 		logger.log_event("player_respawn", _pos_payload())
 		return
 
 	if not collected.has(false):
 		completed = true
+		sfx.play("win")
 		_end_round()
 
 
@@ -175,28 +196,24 @@ func _r(value: float, step: float = 0.1) -> float:
 	return snappedf(value, step)
 
 
-func _draw() -> void:
-	draw_rect(Rect2(Vector2.ZERO, Level.ARENA), Color(0.1, 0.1, 0.14))
-	for s: Rect2 in level.solids:
-		draw_rect(s, Color(0.35, 0.38, 0.45))
-	for trap: Rect2 in level.traps:
-		var teeth := maxi(int(trap.size.x / 10.0), 1)
-		var w := trap.size.x / teeth
-		for i in teeth:
-			var x0 := trap.position.x + i * w
-			draw_colored_polygon(PackedVector2Array([
-				Vector2(x0, trap.end.y), Vector2(x0 + w / 2.0, trap.position.y), Vector2(x0 + w, trap.end.y),
-			]), Color(0.9, 0.2, 0.2))
-	for i in level.coins.size():
-		if not collected[i]:
-			draw_circle(level.coins[i], COIN_RADIUS, Color(1.0, 0.82, 0.2))
+## Text and debug outlines, drawn by the `hud` node so they sit above the level and the player.
+func _draw_hud() -> void:
 	if show_hitbox:
-		draw_rect(body.rect(), Color(0.3, 0.8, 1.0, 0.35))
+		hud.draw_rect(body.rect(), Color(0.3, 0.8, 1.0, 0.35))
+		for trap: Rect2 in level.traps:
+			hud.draw_rect(Level.trap_hitbox(trap), Color(1.0, 0.3, 0.3, 0.35), false)
+		for coin: Vector2 in level.coins:
+			hud.draw_arc(coin, COIN_RADIUS, 0.0, TAU, 24, Color(1.0, 0.9, 0.3, 0.6))
 
-	var font := ThemeDB.fallback_font
-	draw_string(font, Vector2(12, 28), "Coins: %d/%d   Deaths: %d" % [collected.count(true), level.coins.size(), deaths], HORIZONTAL_ALIGNMENT_LEFT, -1, 22)
-	draw_string(font, Vector2(12, Level.ARENA.y - 12), "Level %s" % ("0 (hand-made)" if level.seed_value == 0 else str(level.seed_value)), HORIZONTAL_ALIGNMENT_LEFT, -1, 14)
+	_hud_text(Vector2(12, 28), "Coins: %d/%d   Deaths: %d" % [collected.count(true), level.coins.size(), deaths], 22)
+	_hud_text(Vector2(12, Level.ARENA.y - 12), "Level %s   (F1 hitboxes, M mute)" % ("0 (hand-made)" if level.seed_value == 0 else str(level.seed_value)), 14)
 	if state == State.ENDED:
-		draw_string(font, Vector2(0, 220), "Level complete!", HORIZONTAL_ALIGNMENT_CENTER, Level.ARENA.x, 40)
-		draw_string(font, Vector2(0, 270), "Time: %.1f s   Deaths: %d" % [t, deaths], HORIZONTAL_ALIGNMENT_CENTER, Level.ARENA.x, 26)
-		draw_string(font, Vector2(0, 315), "Press Enter for a new level", HORIZONTAL_ALIGNMENT_CENTER, Level.ARENA.x, 22)
+		_hud_text(Vector2(0, 220), "Level complete!", 40, HORIZONTAL_ALIGNMENT_CENTER, Level.ARENA.x)
+		_hud_text(Vector2(0, 270), "Time: %.1f s   Deaths: %d" % [t, deaths], 26, HORIZONTAL_ALIGNMENT_CENTER, Level.ARENA.x)
+		_hud_text(Vector2(0, 315), "Press Enter for a new level", 22, HORIZONTAL_ALIGNMENT_CENTER, Level.ARENA.x)
+
+
+func _hud_text(pos: Vector2, text: String, size: int, align: HorizontalAlignment = HORIZONTAL_ALIGNMENT_LEFT, width: float = -1.0) -> void:
+	var font := ThemeDB.fallback_font
+	hud.draw_string_outline(font, pos, text, align, width, size, 6, Color(0.08, 0.1, 0.18))
+	hud.draw_string(font, pos, text, align, width, size)

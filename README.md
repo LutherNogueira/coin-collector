@@ -5,17 +5,17 @@ A small 2D platformer built with Godot in which the player collects coins while 
 ## Gameplay
 
 - Move the blue square with **A/D** or the **left/right arrows**. Jump with **W**, **Space** or the **up arrow**.
-- Collect every coin in the level. Gray blocks are solid: you can stand on them and cannot pass through them.
-- Red spikes are traps, and falling into a gap in the ground is also fatal. Dying puts you back at the start of the level with every coin restored, and the round keeps going.
+- Collect every coin (the fruits) in the level. Grass-topped blocks are solid: you can stand on them and cannot pass through them.
+- Spikes are traps (only the visible spike tips kill), and falling into a gap in the ground is also fatal. Dying puts you back at the start of the level with every coin restored, and the round keeps going.
 - There is no time limit. The round is complete when you have collected every coin in one attempt. Press **Enter** for a new level.
 - The first round of a session plays the hand-made level (level 0). Every later round plays a randomly generated one; its seed is shown in the corner.
-- The player is drawn with pixel-art sprites that face the direction of movement and switch between idle, run, jump and fall animations. A short "hit" animation plays where you die. **F1** toggles an outline of the collision box (24×24 px), which is independent of the sprite.
+- Everything is drawn with pixel art from the Pixel Adventure pack: the player faces the direction of movement and switches between idle, run, jump and fall animations (a short "hit" animation plays where you die), coins are animated fruits with a burst when collected, the terrain uses grass-topped tiles, and a tiled sky background drifts slowly behind. Jumping, collecting a coin, dying and finishing a level each play a sound effect; **M** mutes. **F1** shows the real collision shapes (player box, spike hitboxes, coin circles), which are independent of the art.
 
 ## Level generation
 
-`Level.generate(seed)` in [`level.gd`](level.gd) builds a one-screen level from an integer seed, so the same seed always gives the same level. It places ground segments separated by pits, short chains of platforms, spikes, solid blocks and 6–9 coins, using rules that keep everything within jump range (about 100 px high and 170 px across).
+`Level.generate(seed)` in [`level.gd`](level.gd) builds a one-screen level from an integer seed, so the same seed always gives the same level. It places ground segments separated by pits, short chains of platforms, spikes, solid blocks and 6–9 coins, using rules that keep everything within jump range (about 100 px high and 170 px across). Every solid and trap sits on a 16 px grid so the tile art lines up.
 
-Rules are not a guarantee, so [`tests/verify_levels.gd`](tests/verify_levels.gd) checks the result: it runs structural checks (counts, no overlaps) and then simulates the player — walking and jumping with direction changes mid-air, using the same physics as the game — to confirm every coin can be touched on a path where the player stays alive. The hand-made level and 483 generated ones (seeds 1–60 and three ranges of 141 seeds, including seeds that exposed bugs while the generator was being built) pass. That is a large sample, not a proof: an unverified seed could still produce an unfinishable level.
+Rules are not a guarantee, so [`tests/verify_levels.gd`](tests/verify_levels.gd) checks the result: it runs structural checks (counts, no overlaps, 16 px grid) and then simulates the player — walking and jumping with direction changes mid-air, using the same physics as the game — to confirm every coin can be touched on a path where the player stays alive. The hand-made level and 634 generated ones (seeds 1–181 and three ranges of 151 seeds, including seeds that exposed bugs while the generator was being built) pass. That is a large sample, not a proof: an unverified seed could still produce an unfinishable level.
 
 ```bash
 godot --headless --path . --script res://tests/verify_levels.gd -- --from=0 --seeds=60
@@ -37,14 +37,14 @@ Events are appended to `user://events.jsonl` (on Windows: `%APPDATA%\Godot\app_u
 | `valor` | Object whose fields depend on `evento` |
 | `session_id` | UUID of the game session (one program run) |
 | `round_id` | UUID of the round, or `null` for session events |
-| `schema_version` | `3` (`1` was the arena version, `2` the platformer with one fixed level) |
+| `schema_version` | `4` (`1` arena, `2` platformer with one fixed level, `3` generated levels) |
 
 In `valor`, `t` is seconds since the round started, and `x`/`y` are level coordinates (800×600, y grows downward).
 
 | `evento` | Fired when | `valor` |
 |---|---|---|
 | `session_start` | the game starts | `{}` |
-| `round_start` | a round begins | `t`, `level_seed` (0 = hand-made level, otherwise the generator seed) |
+| `round_start` | a round begins | `t`, `level_seed` (0 = hand-made level, otherwise the generator seed), `generator_version` |
 | `coin_spawn` | a coin is placed, at round start and after every death | `t`, `coin_id`, `x`, `y` |
 | `coin_collect` | the player takes a coin | `t`, `coin_id`, `x`, `y`, `dt` (seconds since it last spawned) |
 | `player_position` | every 0.5 s during a round | `t`, `x`, `y` |
@@ -57,7 +57,7 @@ In `valor`, `t` is seconds since the round started, and `x`/`y` are level coordi
 
 `round_end.coins_collected` counts every `coin_collect` in the round, across attempts. `completed` is `false` when the window was closed before all coins were collected.
 
-The formal definitions are in [`schema/`](schema/), one JSON Schema 2020-12 file per `schema_version`. Since a level is determined by its seed, `level_seed` is what lets an analysis reconstruct the layout a round was played on. Design decisions are recorded in [`docs/adr/`](docs/adr/), and domain terms in [`GLOSSARY.md`](GLOSSARY.md).
+The formal definitions are in [`schema/`](schema/), one JSON Schema 2020-12 file per `schema_version`. A level is determined by its seed *and* the version of the level code, so `level_seed` plus `generator_version` is what lets an analysis reconstruct the layout a round was played on. The version goes up whenever the hand-made level or the generator changes (schema 3 logs correspond to version 1). Design decisions are recorded in [`docs/adr/`](docs/adr/), and domain terms in [`GLOSSARY.md`](GLOSSARY.md).
 
 ## Validating the data
 
@@ -89,8 +89,12 @@ It exits with `0` when everything passes and `1` when there are problems.
 | `project.godot`, `main.tscn` | Project settings and main scene (a single `Node2D` with a script) |
 | `main.gd` | Game rules, event logging and drawing with native shapes; `_step()` is input-free so it can be simulated |
 | `player_view.gd` | `PlayerView`: sprite animations and mirroring, driven by the physics body; purely visual |
-| `assets/` | Player sprites and their credits ([`assets/CREDITS.md`](assets/CREDITS.md)) |
+| `assets/` | Art, sounds and their credits ([`assets/CREDITS.md`](assets/CREDITS.md)) |
+| `tools/generate_sfx.py` | Synthesizes the sound effects into `assets/sounds/` (no third-party audio) |
 | `level.gd` | `Level`: the hand-made level and the seeded generator |
+| `scrolling_background.gd` | `ScrollingBackground`: the drifting tiled sky; purely visual |
+| `sfx.gd` | `Sfx`: plays the sound effects and handles mute |
+| `level_view.gd` | `LevelView`: terrain tiles, spikes and animated fruit coins; purely visual |
 | `platform_physics.gd` | `PlatformPhysics`: gravity, jumping and collisions as pure functions, shared by the game and the tests |
 | `event_logger.gd` | `EventLogger`: adds ids, timestamp and schema version, appends one JSON line |
 | `schema/` | JSON Schema for one log line, per `schema_version` |
@@ -100,7 +104,7 @@ It exits with `0` when everything passes and `1` when there are problems.
 
 ## Credits
 
-Player sprites are the Ninja Frog from [Pixel Adventure 1](https://pixelfrog-assets.itch.io/pixel-adventure-1) by Pixel Frog (CC0). See [`assets/CREDITS.md`](assets/CREDITS.md).
+The art (player, fruits, terrain, spikes, background) is from [Pixel Adventure 1](https://pixelfrog-assets.itch.io/pixel-adventure-1) by Pixel Frog (CC0). The sound effects are generated by [`tools/generate_sfx.py`](tools/generate_sfx.py), so they contain no third-party audio. See [`assets/CREDITS.md`](assets/CREDITS.md).
 
 ## Built with
 

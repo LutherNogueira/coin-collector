@@ -24,6 +24,10 @@ _Avoid_: Map, stage, fase
 The integer that determines a generated Level. The same Seed always gives the same Level, and 0 stands for the hand-made one.
 _Avoid_: Level id, random number
 
+**Generator version**:
+The version number of the level code (the hand-made Level and the generator). A Seed only reproduces its Level under the same version.
+_Avoid_: Level revision
+
 **Player**:
 The square the user moves and makes jump.
 _Avoid_: Character, avatar
