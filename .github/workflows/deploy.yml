@@ -36,6 +36,7 @@ jobs:
       - name: Install Godot and the web export templates
         if: steps.godot-cache.outputs.cache-hit != 'true'
         run: |
+          set -x
           mkdir -p ~/godot
           curl -fsSL "https://downloads.godotengine.org/?version=${GODOT_VERSION}&flavor=stable&slug=linux.x86_64.zip&platform=linux.64" -o ~/godot/godot.zip
           unzip -q ~/godot/godot.zip -d ~/godot

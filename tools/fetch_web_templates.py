@@ -13,6 +13,8 @@ import zipfile
 from pathlib import Path
 
 URL = "https://downloads.godotengine.org/?version={version}&flavor=stable&slug=export_templates.tpz&platform=templates"
+# The Godot download host answers 403 to urllib's default User-Agent.
+HEADERS = {"User-Agent": "coin-collector-template-fetch/1.0 (+https://github.com/LutherNogueira/coin-collector)"}
 WANTED = ["version.txt", "web_nothreads_release.zip", "web_nothreads_debug.zip", "web_release.zip", "web_debug.zip"]
 
 
@@ -20,7 +22,7 @@ class RangeFile(io.RawIOBase):
     """A read-only, seekable file backed by HTTP range requests."""
 
     def __init__(self, url: str) -> None:
-        head = urllib.request.urlopen(urllib.request.Request(url, method="HEAD"))
+        head = urllib.request.urlopen(urllib.request.Request(url, method="HEAD", headers=HEADERS))
         self.url = head.geturl()   # the redirect target
         self.size = int(head.headers["Content-Length"])
         self.pos = 0
@@ -45,7 +47,7 @@ class RangeFile(io.RawIOBase):
             n = self.size - self.pos
         if n <= 0:
             return b""
-        request = urllib.request.Request(self.url, headers={"Range": f"bytes={self.pos}-{self.pos + n - 1}"})
+        request = urllib.request.Request(self.url, headers={**HEADERS, "Range": f"bytes={self.pos}-{self.pos + n - 1}"})
         data = urllib.request.urlopen(request).read()
         self.pos += len(data)
         self.downloaded += len(data)
