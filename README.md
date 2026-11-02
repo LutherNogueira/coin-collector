@@ -1,5 +1,7 @@
 # Coin Collector
 
+**Play it in your browser: [coin-collector-omega.vercel.app](https://coin-collector-omega.vercel.app/)** (keyboard only).
+
 A small 2D platformer built with Godot in which the player collects coins while avoiding traps. Every action is recorded to a [JSON Lines](https://jsonlines.org/) file following a documented schema, and a Python validator checks that the recorded data is consistent.
 
 ## Gameplay
@@ -92,6 +94,8 @@ It exits with `0` when everything passes and `1` when there are problems.
 | `player_view.gd` | `PlayerView`: sprite animations and mirroring, driven by the physics body; purely visual |
 | `assets/` | Art, sounds and their credits ([`assets/CREDITS.md`](assets/CREDITS.md)) |
 | `tools/generate_sfx.py` | Synthesizes the sound effects into `assets/sounds/` (no third-party audio) |
+| `tools/fetch_web_templates.py`, `tools/serve_web.py` | Install the web export templates; serve the web build locally |
+| `export_presets.cfg`, `vercel.json`, `.github/workflows/` | Web export preset, Vercel configuration and the deploy workflow |
 | `level.gd` | `Level`: the hand-made level and the seeded generator |
 | `scrolling_background.gd` | `ScrollingBackground`: the drifting tiled sky; purely visual |
 | `sfx.gd` | `Sfx`: plays the sound effects and handles mute |
@@ -103,6 +107,23 @@ It exits with `0` when everything passes and `1` when there are problems.
 | `validate_events.py` | Schema and consistency validator |
 | `tests/` | Headless level verifier and scripted-play simulation |
 | `GLOSSARY.md`, `docs/adr/` | Domain language and design decisions |
+
+## Web build and deployment
+
+The game also runs in the browser (see the link at the top): Godot exports it to WebAssembly (single-threaded, so no special headers are needed). The picture is scaled to the window and centered, keeping its 800×600 proportions. The `Web` preset in [`export_presets.cfg`](export_presets.cfg) writes to `build/web/` (git-ignored).
+
+- **Branches:** work happens on `dev`; `main` only receives merges from `dev` when a version is ready to publish.
+- **Deploying:** [`.github/workflows/deploy.yml`](.github/workflows/deploy.yml) exports the project on every push to `main` or `dev` and deploys it to [Vercel](https://vercel.com) with the Vercel CLI: `main` becomes the production deployment and `dev` a preview deployment. Vercel cannot export a Godot project itself, so the build runs on GitHub Actions and only the result is uploaded. The repository's [`vercel.json`](vercel.json) turns off Vercel's own Git builds, which would only see source code. The workflow needs three repository secrets (Settings > Secrets and variables > Actions): `VERCEL_TOKEN`, `VERCEL_ORG_ID` and `VERCEL_PROJECT_ID`.
+- **Templates:** the web export templates are fetched by [`tools/fetch_web_templates.py`](tools/fetch_web_templates.py), which downloads only the web part (about 40 MB) of the official 1.2 GB templates archive.
+- **Try it locally:** install the web templates, then export and serve:
+
+```bash
+python tools/fetch_web_templates.py --version 4.7.2 --dest "$APPDATA/Godot/export_templates/4.7.2.stable"   # Windows path
+godot --headless --path . --export-release "Web" build/web/index.html
+python tools/serve_web.py          # http://127.0.0.1:8060/index.html
+```
+
+On the web, `user://events.jsonl` lives in the browser's own storage, so the hosted version does not send events anywhere yet. Browsers also only allow sound after the first key press or click.
 
 ## Credits
 
