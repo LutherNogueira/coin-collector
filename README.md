@@ -1,5 +1,7 @@
 # Coin Collector
 
+**Play it in your browser: [coin-collector-omega.vercel.app](https://coin-collector-omega.vercel.app/)** (keyboard only).
+
 A small 2D platformer built with Godot in which the player collects coins while avoiding traps. Every action is recorded to a [JSON Lines](https://jsonlines.org/) file following a documented schema, and a Python validator checks that the recorded data is consistent.
 
 ## Gameplay
@@ -108,7 +110,7 @@ It exits with `0` when everything passes and `1` when there are problems.
 
 ## Web build and deployment
 
-The game also runs in the browser: Godot exports it to WebAssembly (single-threaded, so no special headers are needed). The `Web` preset in [`export_presets.cfg`](export_presets.cfg) writes to `build/web/` (git-ignored).
+The game also runs in the browser (see the link at the top): Godot exports it to WebAssembly (single-threaded, so no special headers are needed). The picture is scaled to the window and centered, keeping its 800×600 proportions. The `Web` preset in [`export_presets.cfg`](export_presets.cfg) writes to `build/web/` (git-ignored).
 
 - **Branches:** work happens on `dev`; `main` only receives merges from `dev` when a version is ready to publish.
 - **Deploying:** [`.github/workflows/deploy.yml`](.github/workflows/deploy.yml) exports the project on every push to `main` or `dev` and deploys it to [Vercel](https://vercel.com) with the Vercel CLI: `main` becomes the production deployment and `dev` a preview deployment. Vercel cannot export a Godot project itself, so the build runs on GitHub Actions and only the result is uploaded. The repository's [`vercel.json`](vercel.json) turns off Vercel's own Git builds, which would only see source code. The workflow needs three repository secrets (Settings > Secrets and variables > Actions): `VERCEL_TOKEN`, `VERCEL_ORG_ID` and `VERCEL_PROJECT_ID`.
