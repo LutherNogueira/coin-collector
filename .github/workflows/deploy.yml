@@ -64,3 +64,4 @@ jobs:
           URL=$(vercel deploy build/web $FLAGS --yes)
           echo "Deployed ${GITHUB_REF_NAME}: ${URL}"
           echo "Deployed \`${GITHUB_REF_NAME}\`: ${URL}" >> "$GITHUB_STEP_SUMMARY"
+          echo "::notice title=Deployed ${GITHUB_REF_NAME}::${URL}"
