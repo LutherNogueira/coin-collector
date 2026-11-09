@@ -11,6 +11,7 @@ A small 2D platformer built with Godot in which the player collects coins while 
 - Spikes are traps (only the visible spike tips kill), and falling into a gap in the ground is also fatal. Dying plays a short "hit" animation, then after 0.6 seconds puts you back at the start of the level with every coin restored, and the round keeps going.
 - There is no time limit. The round is complete when you have collected every coin in one attempt. Press **Enter** for a new level.
 - The first round of a session plays the hand-made level (level 0). Every later round plays a randomly generated one; its seed is shown in the corner.
+- **Esc** opens a menu and pauses the game (the round clock and the event log stop with it): resume, **choose your character** (Ninja Frog, Mask Dude, Pink Man or Virtual Guy, remembered between visits) and open the **statistics** page. The choice is a personal setting and is not part of the telemetry.
 - Everything is drawn with pixel art from the Pixel Adventure pack: the player faces the direction of movement and switches between idle, run, jump and fall animations (a short "hit" animation plays where you die), coins are animated fruits with a burst when collected, the terrain uses grass-topped tiles, and a tiled sky background drifts slowly behind. Background music loops during play, and jumping, collecting a fruit, dying and finishing a level each play a sound effect; **M** mutes everything. **F1** shows the real collision shapes (player box, spike hitboxes, coin circles), which are independent of the art.
 
 ## Level generation
@@ -91,7 +92,8 @@ It exits with `0` when everything passes and `1` when there are problems.
 |---|---|
 | `project.godot`, `main.tscn` | Project settings and main scene (a single `Node2D` with a script) |
 | `main.gd` | Game rules, event logging and drawing with native shapes; `_step()` is input-free so it can be simulated |
-| `player_view.gd` | `PlayerView`: sprite animations and mirroring, driven by the physics body; purely visual |
+| `player_view.gd` | `PlayerView`: sprite animations and mirroring for the chosen character, driven by the physics body; purely visual |
+| `pause_menu.gd`, `avatars.gd`, `settings.gd` | The Esc menu, the list of playable characters, and the saved choice (`user://settings.cfg`) |
 | `assets/` | Art, sounds and their credits ([`assets/CREDITS.md`](assets/CREDITS.md)) |
 | `tools/generate_sfx.py` | Synthesizes the sound effects into `assets/sounds/` (no third-party audio) |
 | `tools/fetch_web_templates.py`, `tools/serve_web.py` | Install the web export templates; serve the web build locally |

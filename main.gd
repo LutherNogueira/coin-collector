@@ -15,6 +15,7 @@ var body: PlatformPhysics.Body
 var level_view: LevelView
 var view: PlayerView
 var hud: Node2D
+var menu: PauseMenu
 var sfx: Sfx
 var show_hitbox := false
 var t := 0.0
@@ -45,8 +46,15 @@ func _ready() -> void:
 	hud = Node2D.new()
 	hud.draw.connect(_draw_hud)
 	add_child(hud)
+	menu = PauseMenu.new()
+	menu.avatar_selected.connect(view.set_avatar)
+	add_child(menu)
+	var saved_avatar := Settings.load_avatar()
+	view.set_avatar(saved_avatar)
+	menu.set_avatar(saved_avatar)
 	logger.log_event("session_start")
 	_start_round()
+	view.sync_with(body, 0.0)   # so the player is already in place if the menu is opened on the first frame
 
 
 func _process(delta: float) -> void:
@@ -231,7 +239,7 @@ func _draw_hud() -> void:
 			hud.draw_arc(coin, COIN_RADIUS, 0.0, TAU, 24, Color(1.0, 0.9, 0.3, 0.6))
 
 	_hud_text(Vector2(12, 28), "Coins: %d/%d   Deaths: %d" % [collected.count(true), level.coins.size(), deaths], 22)
-	_hud_text(Vector2(12, Level.ARENA.y - 12), "Level %s   (F1 hitboxes, M mute)" % ("0 (hand-made)" if level.seed_value == 0 else str(level.seed_value)), 14)
+	_hud_text(Vector2(12, Level.ARENA.y - 12), "Level %s   (Esc menu, M mute, F1 hitboxes)" % ("0 (hand-made)" if level.seed_value == 0 else str(level.seed_value)), 14)
 	if state == State.ENDED:
 		_hud_text(Vector2(0, 220), "Level complete!", 40, HORIZONTAL_ALIGNMENT_CENTER, Level.ARENA.x)
 		_hud_text(Vector2(0, 270), "Time: %.1f s   Deaths: %d" % [t, deaths], 26, HORIZONTAL_ALIGNMENT_CENTER, Level.ARENA.x)

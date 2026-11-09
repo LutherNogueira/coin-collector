@@ -28,6 +28,10 @@ _Avoid_: Level id, random number
 The version number of the level code (the hand-made Level and the generator). A Seed only reproduces its Level under the same version.
 _Avoid_: Level revision
 
+**Avatar**:
+The character the Player chose to look like. Purely cosmetic and remembered between visits; it is not recorded in the Events.
+_Avoid_: Skin, character
+
 **Player**:
 The square the user moves and makes jump.
 _Avoid_: Character, avatar
