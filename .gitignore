@@ -6,3 +6,5 @@ __pycache__/
 build/
 pipeline/data/
 stats/data/gold.json
+.env.local
+.env
