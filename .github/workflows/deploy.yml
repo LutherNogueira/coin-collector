@@ -53,6 +53,34 @@ jobs:
           ls -la build/web
           test -s build/web/index.html && test -s build/web/index.wasm && test -s build/web/index.pck
 
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: |
+            requirements.txt
+            pipeline/requirements.txt
+
+      - name: Test the telemetry pipeline
+        run: |
+          pip install -r requirements.txt -r pipeline/requirements.txt
+          python -m unittest discover -s pipeline/tests -t .
+
+      - name: Build the metrics data (synthetic demo data through bronze, silver and gold)
+        run: |
+          python -m pipeline.generate_synthetic --out pipeline/data/raw/synthetic --days 40
+          python -m pipeline.run_pipeline --raw pipeline/data/raw/synthetic --out metrics_app/data/gold.json --label "synthetic demo data"
+
+      - name: Check and export the metrics screen (served at /metrics/)
+        run: |
+          GODOT=$(ls ~/godot/Godot_v${GODOT_VERSION}-stable_linux.x86_64)
+          "$GODOT" --headless --path metrics_app --import || true
+          "$GODOT" --headless --path metrics_app --script res://tests/check_ui.gd
+          mkdir -p build/web/metrics
+          "$GODOT" --headless --path metrics_app --export-release "Web" "$GITHUB_WORKSPACE/build/web/metrics/index.html"
+          ls -la build/web/metrics
+          test -s build/web/metrics/index.html && test -s build/web/metrics/index.wasm && test -s build/web/metrics/index.pck
+
       - uses: actions/setup-node@v4
         with:
           node-version: 20
