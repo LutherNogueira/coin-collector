@@ -22,6 +22,14 @@ func play(sound_name: String) -> void:
 	(_players[sound_name] as AudioStreamPlayer).play()
 
 
+## Muting is on the Master bus, so it silences the music too. It is static because the menu needs it as well as the M key.
+static func is_muted() -> bool:
+	return AudioServer.is_bus_mute(AudioServer.get_bus_index("Master"))
+
+
+static func set_muted(muted: bool) -> void:
+	AudioServer.set_bus_mute(AudioServer.get_bus_index("Master"), muted)
+
+
 func toggle_mute() -> void:
-	var bus := AudioServer.get_bus_index("Master")
-	AudioServer.set_bus_mute(bus, not AudioServer.is_bus_mute(bus))
+	Sfx.set_muted(not Sfx.is_muted())

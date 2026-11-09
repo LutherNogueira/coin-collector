@@ -1,29 +1,38 @@
 class_name TouchControls
 extends CanvasLayer
-## On-screen buttons for phones and tablets: left and right at the bottom left, jump at the bottom right.
-## Each finger is tracked on its own, so a player can hold a direction and tap jump at once, and sliding a finger
-## from one button to the other changes direction. They only show on a touch screen, or when forced
-## (add ?touch to the page address to try them with a mouse).
+## Touch controls drawn over the game: an analog stick that appears under the left thumb, a jump zone on the right
+## half of the screen and a menu button in the top right corner (the same as pressing Esc).
+## Every finger is tracked on its own, so the stick and the jump work at the same time. They only show on a touch
+## screen, or when forced (add ?touch to the page address to try them with a mouse).
 
-## A finger went down at this point (used to start the next level after a win).
+## A finger went down at this point (not on the menu button); used to start the next level after a win.
 signal pressed(position: Vector2)
+## The menu button was tapped.
+signal menu_requested
 
-const BUTTON_SIZE := Vector2(100, 100)
+const STICK_RADIUS := 70.0      # how far the knob can travel from where the thumb first touched
+const DEAD_ZONE := 0.15         # share of the radius that still counts as standing still
 const MARGIN := 16.0
-const GAP := 12.0
-## Fingers are not precise: a press just outside a button still counts.
-const SLACK := 18.0
+const JUMP_RADIUS := 52.0
+const MENU_SIZE := Vector2(52, 52)
+## Fingers are not precise: a press just outside the menu button still counts.
+const SLACK := 10.0
 const MOUSE_FINGER := -1
-const NAMES := ["left", "right", "jump"]
+const NO_FINGER := -99
 
-## Show the buttons even without a touch screen (tests, or ?touch in the page address).
+enum Role { NONE, STICK, JUMP, MENU }
+
+## Show the controls even without a touch screen (tests, or ?touch in the page address).
 var forced := false
 
-var _fingers := {}   # finger index -> name of the button under it ("" when none)
+var _roles := {}   # finger index -> Role
+var _stick_finger := NO_FINGER
+var _stick_origin := Vector2.ZERO
+var _stick_now := Vector2.ZERO
 var _canvas := Node2D.new()
 
 
-## True when the page address asks for the buttons (web build only).
+## True when the page address asks for the controls (web build only).
 static func requested_by_page() -> bool:
 	return OS.has_feature("web") and bool(JavaScriptBridge.eval("new URLSearchParams(window.location.search).has('touch')"))
 
@@ -33,8 +42,8 @@ func _init() -> void:
 
 
 func _ready() -> void:
-	get_viewport().size_changed.connect(_canvas.queue_redraw)   # the buttons follow the screen's corners
-	_canvas.draw.connect(_draw_buttons)
+	get_viewport().size_changed.connect(_canvas.queue_redraw)
+	_canvas.draw.connect(_draw_controls)
 	add_child(_canvas)
 	visible = is_active()
 
@@ -43,17 +52,29 @@ func is_active() -> bool:
 	return forced or DisplayServer.is_touchscreen_available()
 
 
-## -1 while only left is held, +1 while only right is held, otherwise 0.
+## Horizontal push of the stick from -1 (full left) to 1 (full right), 0 inside the dead zone.
 func move_x() -> float:
-	return float(int(is_held("right")) - int(is_held("left")))
+	if _stick_finger == NO_FINGER:
+		return 0.0
+	var pull := clampf((_stick_now.x - _stick_origin.x) / STICK_RADIUS, -1.0, 1.0)
+	if absf(pull) < DEAD_ZONE:
+		return 0.0
+	return signf(pull) * (absf(pull) - DEAD_ZONE) / (1.0 - DEAD_ZONE)
 
 
 func jump_down() -> bool:
-	return is_held("jump")
+	return _roles.values().has(Role.JUMP)
 
 
-func is_held(button: String) -> bool:
-	return _fingers.values().has(button)
+func stick_active() -> bool:
+	return _stick_finger != NO_FINGER
+
+
+## Lets go of every finger (the game does this when the menu opens, so nothing stays held while it is paused).
+func release_all() -> void:
+	_roles.clear()
+	_stick_finger = NO_FINGER
+	_canvas.queue_redraw()
 
 
 func _input(event: InputEvent) -> void:
@@ -62,60 +83,97 @@ func _input(event: InputEvent) -> void:
 	if event is InputEventScreenTouch:
 		_touch(event.index, event.position, event.pressed)
 	elif event is InputEventScreenDrag:
-		_fingers[event.index] = button_at(event.position)
-		_canvas.queue_redraw()
+		_drag(event.index, event.position)
 	elif forced and event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_LEFT:
 		_touch(MOUSE_FINGER, event.position, event.pressed)
 	elif forced and event is InputEventMouseMotion and event.button_mask & MOUSE_BUTTON_MASK_LEFT:
-		_fingers[MOUSE_FINGER] = button_at(event.position)
-		_canvas.queue_redraw()
+		_drag(MOUSE_FINGER, event.position)
 
 
 func _notification(what: int) -> void:
 	if what == NOTIFICATION_APPLICATION_FOCUS_OUT or what == NOTIFICATION_WM_WINDOW_FOCUS_OUT:
-		_fingers.clear()   # a finger lifted while the window was away would otherwise leave a button stuck
-		_canvas.queue_redraw()
+		release_all()   # a finger lifted while the window was away would otherwise leave the stick stuck
 
 
 func _touch(index: int, position: Vector2, down: bool) -> void:
 	if down:
-		_fingers[index] = button_at(position)
-		pressed.emit(position)
+		var role := role_at(position)
+		if role == Role.STICK and _stick_finger != NO_FINGER:
+			role = Role.NONE   # the stick already has a thumb on it
+		_roles[index] = role
+		match role:
+			Role.STICK:
+				_stick_finger = index
+				_stick_origin = position
+				_stick_now = position
+			Role.MENU:
+				menu_requested.emit()
+		if role != Role.MENU:
+			pressed.emit(position)
 	else:
-		_fingers.erase(index)
+		if index == _stick_finger:
+			_stick_finger = NO_FINGER
+		_roles.erase(index)
 	_canvas.queue_redraw()
 
 
-## Where a button is, in viewport coordinates. They sit in the bottom corners of the whole screen (the game is
-## centred, so on a phone that is the free space beside it, or below it when held upright).
-func button_rect(button: String) -> Rect2:
-	var screen := get_viewport().get_visible_rect().size
-	var y := screen.y - MARGIN - BUTTON_SIZE.y
-	match button:
-		"left": return Rect2(Vector2(MARGIN, y), BUTTON_SIZE)
-		"right": return Rect2(Vector2(MARGIN + BUTTON_SIZE.x + GAP, y), BUTTON_SIZE)
-		_: return Rect2(Vector2(screen.x - MARGIN - BUTTON_SIZE.x, y), BUTTON_SIZE)
+func _drag(index: int, position: Vector2) -> void:
+	if index == _stick_finger:
+		_stick_now = position
+		_canvas.queue_redraw()
 
 
-## The button under a point, or "" when there is none.
-func button_at(point: Vector2) -> String:
-	for name: String in NAMES:
-		if button_rect(name).grow(SLACK).has_point(point):
-			return name
-	return ""
+## What a finger that goes down at `point` is for: the menu button, the stick (left half) or the jump (right half).
+func role_at(point: Vector2) -> int:
+	if menu_rect().grow(SLACK).has_point(point):
+		return Role.MENU
+	return Role.STICK if point.x < _screen().x / 2.0 else Role.JUMP
 
 
-func _draw_buttons() -> void:
-	for name: String in NAMES:
-		var rect := button_rect(name)
-		var held := is_held(name)
-		_canvas.draw_rect(rect, Color(0.05, 0.08, 0.16, 0.55 if held else 0.3))
-		_canvas.draw_rect(rect, Color(1, 1, 1, 0.75 if held else 0.45), false, 3.0)
-		var c := rect.get_center()
-		var s := 24.0
-		var arrow := PackedVector2Array()
-		match name:
-			"left": arrow = [c + Vector2(-s, 0), c + Vector2(s * 0.6, -s), c + Vector2(s * 0.6, s)]
-			"right": arrow = [c + Vector2(s, 0), c + Vector2(-s * 0.6, -s), c + Vector2(-s * 0.6, s)]
-			"jump": arrow = [c + Vector2(0, -s), c + Vector2(-s, s * 0.6), c + Vector2(s, s * 0.6)]
-		_canvas.draw_colored_polygon(arrow, Color(1, 1, 1, 0.9 if held else 0.6))
+func menu_rect() -> Rect2:
+	return Rect2(Vector2(_screen().x - MARGIN - MENU_SIZE.x, MARGIN), MENU_SIZE)
+
+
+## Where the stick rests, and where the jump hint is drawn, before any finger moves them.
+func rest_position() -> Vector2:
+	var s := _screen()
+	return Vector2(MARGIN + STICK_RADIUS + 14.0, s.y - MARGIN - STICK_RADIUS - 14.0)
+
+
+func jump_position() -> Vector2:
+	var s := _screen()
+	return Vector2(s.x - MARGIN - JUMP_RADIUS - 14.0, s.y - MARGIN - JUMP_RADIUS - 14.0)
+
+
+func _screen() -> Vector2:
+	return get_viewport().get_visible_rect().size
+
+
+func _draw_controls() -> void:
+	# Stick: faint at its resting place, under the thumb while held.
+	var held := stick_active()
+	var base := _stick_origin if held else rest_position()
+	var knob := base
+	if held:
+		knob = base + (_stick_now - base).limit_length(STICK_RADIUS)
+	_canvas.draw_circle(base, STICK_RADIUS, Color(0.05, 0.08, 0.16, 0.38 if held else 0.18))
+	_canvas.draw_arc(base, STICK_RADIUS, 0.0, TAU, 48, Color(1, 1, 1, 0.6 if held else 0.3), 3.0)
+	_canvas.draw_circle(knob, 28.0, Color(1, 1, 1, 0.65 if held else 0.3))
+
+	# Jump: a hint at the bottom right; the whole right half of the screen is the button.
+	var jumping := jump_down()
+	var jc := jump_position()
+	_canvas.draw_circle(jc, JUMP_RADIUS, Color(0.05, 0.08, 0.16, 0.45 if jumping else 0.18))
+	_canvas.draw_arc(jc, JUMP_RADIUS, 0.0, TAU, 48, Color(1, 1, 1, 0.75 if jumping else 0.35), 3.0)
+	var s := 20.0
+	_canvas.draw_colored_polygon(
+		PackedVector2Array([jc + Vector2(0, -s), jc + Vector2(-s, s * 0.7), jc + Vector2(s, s * 0.7)]),
+		Color(1, 1, 1, 0.9 if jumping else 0.4))
+
+	# Menu button: two bars (pause).
+	var m := menu_rect()
+	_canvas.draw_rect(m, Color(0.05, 0.08, 0.16, 0.4))
+	_canvas.draw_rect(m, Color(1, 1, 1, 0.55), false, 3.0)
+	var c := m.get_center()
+	_canvas.draw_rect(Rect2(c + Vector2(-11, -13), Vector2(8, 26)), Color(1, 1, 1, 0.8))
+	_canvas.draw_rect(Rect2(c + Vector2(3, -13), Vector2(8, 26)), Color(1, 1, 1, 0.8))

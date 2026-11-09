@@ -68,6 +68,8 @@ func _ready() -> void:
 	get_viewport().size_changed.connect(_center_arena)
 	touch.forced = touch.forced or TouchControls.requested_by_page()
 	touch.pressed.connect(_on_touch_pressed)
+	touch.menu_requested.connect(menu.toggle)   # the touch version of Esc
+	menu.opened.connect(touch.release_all)
 	add_child(touch)
 	logger.log_event("session_start")
 	_start_round()
@@ -110,8 +112,7 @@ func _read_move_x() -> float:
 	return clampf(x + touch.move_x(), -1.0, 1.0)
 
 
-## The window can be wider or taller than the 800x600 arena (stretch aspect is "expand"); keep the arena in the middle
-## and leave the rest for the touch buttons.
+## The window can be wider or taller than the 800x600 arena (stretch aspect is "expand"); keep the arena in the middle.
 func _center_arena() -> void:
 	position = ((get_viewport().get_visible_rect().size - Level.ARENA) / 2.0).floor()
 
@@ -269,10 +270,10 @@ func _draw_hud() -> void:
 			hud.draw_arc(coin, COIN_RADIUS, 0.0, TAU, 24, Color(1.0, 0.9, 0.3, 0.6))
 
 	_hud_text(Vector2(12, 28), "Coins: %d/%d   Deaths: %d" % [collected.count(true), level.coins.size(), deaths], 22)
-	_hud_text(Vector2(12, Level.ARENA.y - 12), "Level %s   (Esc menu, M mute, F1 hitboxes)" % ("0 (hand-made)" if level.seed_value == 0 else str(level.seed_value)), 14)
+	_hud_text(Vector2(12, Level.ARENA.y - 12), "Level %s%s" % ["0 (hand-made)" if level.seed_value == 0 else str(level.seed_value), "" if touch.is_active() else "   (Esc menu, M mute, F1 hitboxes)"], 14)
 	if notice_left > 0.0:
 		_hud_text(Vector2(0, 56), "This game sends anonymous match statistics to its developer.", 14, HORIZONTAL_ALIGNMENT_CENTER, Level.ARENA.x)
-		_hud_text(Vector2(0, 76), "You can turn that off in the Esc menu.", 14, HORIZONTAL_ALIGNMENT_CENTER, Level.ARENA.x)
+		_hud_text(Vector2(0, 76), "You can turn that off in the menu.", 14, HORIZONTAL_ALIGNMENT_CENTER, Level.ARENA.x)
 	if state == State.ENDED:
 		_hud_text(Vector2(0, 220), "Level complete!", 40, HORIZONTAL_ALIGNMENT_CENTER, Level.ARENA.x)
 		_hud_text(Vector2(0, 270), "Time: %.1f s   Deaths: %d" % [t, deaths], 26, HORIZONTAL_ALIGNMENT_CENTER, Level.ARENA.x)
