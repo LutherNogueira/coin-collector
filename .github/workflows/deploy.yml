@@ -1,10 +1,10 @@
 name: Deploy web build
 
 # Tests the telemetry pipeline and the collection endpoint, builds the statistics data, checks the game, exports it for web and deploys it
-# to Vercel: pushes to main go to production, pushes to dev become preview deployments.
+# to Vercel: pushes to main go to production, pushes to dev and feature/** branches become preview deployments.
 on:
   push:
-    branches: [main, dev]
+    branches: [main, dev, 'feature/**']
   workflow_dispatch:
 
 concurrency:
@@ -70,13 +70,14 @@ jobs:
       - name: Test the collection endpoint
         run: cd ingest && npm test
 
-      - name: Check the game (Esc menu, statistics screen and event sink)
+      - name: Check the game (Esc menu, statistics screen, event sink and touch controls)
         run: |
           GODOT=$(ls ~/godot/Godot_v${GODOT_VERSION}-stable_linux.x86_64)
           "$GODOT" --headless --path . --import || true
           "$GODOT" --headless --path . --script res://tests/check_menu.gd
           "$GODOT" --headless --path . --script res://tests/check_stats.gd
           "$GODOT" --headless --path . --script res://tests/check_sender.gd
+          "$GODOT" --headless --path . --script res://tests/check_touch.gd
 
       - name: Export the web build
         run: |
