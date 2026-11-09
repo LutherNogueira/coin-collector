@@ -105,8 +105,31 @@ It exits with `0` when everything passes and `1` when there are problems.
 | `event_logger.gd` | `EventLogger`: adds ids, timestamp and schema version, appends one JSON line |
 | `schema/` | JSON Schema for one log line, per `schema_version` |
 | `validate_events.py` | Schema and consistency validator |
+| `pipeline/` | The bronze/silver/gold telemetry pipeline, its synthetic data generator and tests |
 | `tests/` | Headless level verifier and scripted-play simulation |
 | `GLOSSARY.md`, `docs/adr/` | Domain language and design decisions |
+
+## Telemetry pipeline
+
+[`pipeline/`](pipeline/) turns the event log into metrics with Python and [DuckDB](https://duckdb.org/), in three layers (a "medallion" architecture):
+
+| Layer | Holds | Where |
+|---|---|---|
+| **Bronze** | every line exactly as received, with source file and line number, broken lines included | `bronze.raw_events` |
+| **Silver** | clean, typed events with schema versions 2, 3 and 4 conformed to one shape, plus `quarantine`: each rejected line with one reason (`invalid_json`, `missing_field`, `invalid_timestamp`, `timestamp_out_of_range`, `unsupported_schema_version`, `unknown_event`, `value_out_of_range`, `duplicate`) | `silver.events`, `silver.rounds`, `silver.deaths`, `silver.quarantine` |
+| **Gold** | the metrics | `gold.daily_metrics`, `gold.summary`, `gold.deaths_by_cause`, `gold.deadliest_levels`, `gold.data_quality` |
+
+Metrics, per day in UTC: **rounds**, **completion rate** (completed rounds over rounds that ended), **average and median duration** of completed rounds, and **death rate** (deaths over attempts, where an attempt is one start of the level: the first of each round plus one per respawn).
+
+```bash
+pip install -r pipeline/requirements.txt
+python -m pipeline.generate_synthetic --out pipeline/data/raw/synthetic --days 40      # synthetic demo data, with dirty rows
+python -m pipeline.run_pipeline --raw pipeline/data/raw/synthetic --out pipeline/data/gold.json
+python -m pipeline.run_pipeline --raw "$APPDATA/Godot/app_userdata/Coin Collector/events.jsonl" --label "real plays"
+python -m unittest discover -s pipeline/tests -t .                                      # checks everything against ground truth
+```
+
+The synthetic generator is **not real players**: it writes days of plausible events and adds dirty rows on top, along with a `manifest.json` of the true answers, which the tests compare the pipeline against. See [ADR 0005](docs/adr/0005-medallion-pipeline-tested-against-synthetic-truth.md).
 
 ## Web build and deployment
 
