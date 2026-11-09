@@ -1,13 +1,9 @@
 class_name PauseMenu
 extends CanvasLayer
 ## The Esc menu. It pauses the game (the round clock and the event log stop with it), lets the player pick a
-## character, and opens the statistics page. It keeps running while the rest of the tree is paused.
+## character, and opens the statistics screen over it. It keeps running while the rest of the tree is paused.
 
 signal avatar_selected(avatar: String)
-
-## On the web the statistics are a page next to the game; elsewhere they are on the published site.
-const STATS_URL_WEB := "metrics/"
-const STATS_URL_NATIVE := "https://coin-collector-omega.vercel.app/metrics/"
 
 const PANEL_BG := Color(0.13, 0.16, 0.26)
 const PANEL_BORDER := Color(0.28, 0.34, 0.52)
@@ -16,6 +12,7 @@ const MUTED := Color(0.62, 0.68, 0.82)
 const GOLD := Color(1.0, 0.82, 0.2)
 
 var avatar := Avatars.DEFAULT
+var stats := StatsScreen.new()
 
 var _resume_button: Button
 var _character_button: Button
@@ -77,16 +74,21 @@ func _ready() -> void:
 	row.add_child(choice)
 	column.add_child(row)
 
-	_stats_button = _button("Statistics  (opens a new tab)")
+	_stats_button = _button("Statistics")
 	_stats_button.pressed.connect(open_statistics)
 	column.add_child(_stats_button)
 	column.add_child(_label("M mutes the sound   |   F1 shows the hitboxes", 11, MUTED, HORIZONTAL_ALIGNMENT_CENTER))
+	add_child(stats)
+	stats.closed.connect(func() -> void: _stats_button.grab_focus())
 	_show_avatar()
 
 
 func _unhandled_input(event: InputEvent) -> void:
 	if event is InputEventKey and event.pressed and not event.echo and event.keycode == KEY_ESCAPE:
-		toggle()
+		if stats.is_open():
+			stats.close()   # Esc steps back one level: first the statistics, then the menu
+		else:
+			toggle()
 		get_viewport().set_input_as_handled()
 
 
@@ -126,7 +128,7 @@ func set_avatar(new_avatar: String, announce: bool = false) -> void:
 
 
 func open_statistics() -> void:
-	OS.shell_open(STATS_URL_WEB if OS.has_feature("web") else STATS_URL_NATIVE)
+	stats.open(avatar)
 
 
 func _show_avatar() -> void:

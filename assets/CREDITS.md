@@ -29,8 +29,3 @@ saw and noise waves. They are original to this project and contain no third-part
 - License: CC0 (public domain), as listed on the page, which also says no attribution is necessary.
   Credit is given anyway. The file's own ID3 tag names the artist "Aron Elal" (2022).
 - 2.2 MB MP3, about 55 s, tagged as loopable on the page. The game loops it in code.
-
-## Metrics screen
-
-`metrics_app/assets/` holds unmodified copies of a few of the files above (frog idle, run and fall strips, the apple,
-the spike tile and the blue background tile), so the metrics screen can be its own Godot project.

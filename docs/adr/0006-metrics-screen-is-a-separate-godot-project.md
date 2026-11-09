@@ -1,5 +1,7 @@
 # The metrics screen is a separate Godot project, not part of the game
 
+Status: superseded by [ADR 0007](0007-statistics-screen-lives-inside-the-game.md).
+
 The pipeline's gold layer is shown by a second Godot project, `metrics_app/`, exported to `/metrics/` on the same Vercel site, instead of a JavaScript dashboard or a scene inside the game. A Godot screen keeps the whole repository in GDScript and Python, and a separate project means the game's web build does not change at all: its `index.pck` is byte for byte the same size as the one already in production, with no mention of the pipeline or the metrics. The cost is a second web export, which ships its own copy of the engine's WebAssembly file (about 40 MB, compressed in transit), and a few duplicated sprites.
 
 The screen reads one JSON file that is bundled into it at export time, so it is a snapshot of the data at deploy time and needs no server, database or CORS. On each deploy the workflow regenerates synthetic data, runs the pipeline, checks that the numbers on screen equal the gold numbers, and exports the screen. Live metrics from real players would need an ingestion endpoint, which is a separate project.

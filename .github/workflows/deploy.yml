@@ -1,7 +1,7 @@
 name: Deploy web build
 
-# Exports the Godot project for web and deploys it to Vercel:
-# pushes to main go to production, pushes to dev become preview deployments.
+# Tests the telemetry pipeline, builds the statistics data, checks the game, exports it for web and deploys it
+# to Vercel: pushes to main go to production, pushes to dev become preview deployments.
 on:
   push:
     branches: [main, dev]
@@ -44,15 +44,6 @@ jobs:
           chmod +x ~/godot/Godot_v${GODOT_VERSION}-stable_linux.x86_64
           python3 tools/fetch_web_templates.py --version "${GODOT_VERSION}" --dest ~/.local/share/godot/export_templates/${GODOT_VERSION}.stable
 
-      - name: Export the web build
-        run: |
-          GODOT=$(ls ~/godot/Godot_v${GODOT_VERSION}-stable_linux.x86_64)
-          mkdir -p build/web
-          "$GODOT" --headless --path . --import || true
-          "$GODOT" --headless --path . --export-release "Web" build/web/index.html
-          ls -la build/web
-          test -s build/web/index.html && test -s build/web/index.wasm && test -s build/web/index.pck
-
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
@@ -66,20 +57,26 @@ jobs:
           pip install -r requirements.txt -r pipeline/requirements.txt
           python -m unittest discover -s pipeline/tests -t .
 
-      - name: Build the metrics data (synthetic demo data through bronze, silver and gold)
+      - name: Build the statistics data (synthetic demo data through bronze, silver and gold)
+        # The game bundles stats/data/gold.json when it is exported, so this has to happen first.
         run: |
           python -m pipeline.generate_synthetic --out pipeline/data/raw/synthetic --days 40
-          python -m pipeline.run_pipeline --raw pipeline/data/raw/synthetic --out metrics_app/data/gold.json --label "synthetic demo data"
+          python -m pipeline.run_pipeline --raw pipeline/data/raw/synthetic --out stats/data/gold.json --label "synthetic demo data"
 
-      - name: Check and export the metrics screen (served at /metrics/)
+      - name: Check the game (Esc menu and statistics screen)
         run: |
           GODOT=$(ls ~/godot/Godot_v${GODOT_VERSION}-stable_linux.x86_64)
-          "$GODOT" --headless --path metrics_app --import || true
-          "$GODOT" --headless --path metrics_app --script res://tests/check_ui.gd
-          mkdir -p build/web/metrics
-          "$GODOT" --headless --path metrics_app --export-release "Web" "$GITHUB_WORKSPACE/build/web/metrics/index.html"
-          ls -la build/web/metrics
-          test -s build/web/metrics/index.html && test -s build/web/metrics/index.wasm && test -s build/web/metrics/index.pck
+          "$GODOT" --headless --path . --import || true
+          "$GODOT" --headless --path . --script res://tests/check_menu.gd
+          "$GODOT" --headless --path . --script res://tests/check_stats.gd
+
+      - name: Export the web build
+        run: |
+          GODOT=$(ls ~/godot/Godot_v${GODOT_VERSION}-stable_linux.x86_64)
+          mkdir -p build/web
+          "$GODOT" --headless --path . --export-release "Web" build/web/index.html
+          ls -la build/web
+          test -s build/web/index.html && test -s build/web/index.wasm && test -s build/web/index.pck
 
       - uses: actions/setup-node@v4
         with:

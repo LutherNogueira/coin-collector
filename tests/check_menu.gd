@@ -89,9 +89,6 @@ func _init() -> void:
 			counts[anim] = frames.get_frame_count(anim)
 		_expect(counts == {"idle": 11, "run": 12, "jump": 1, "fall": 1, "hit": 7}, "%s has all its animations %s" % [id, counts])
 
-	# The statistics button points at a page next to the game on the web, and at the published site elsewhere.
-	_expect(PauseMenu.STATS_URL_WEB == "metrics/" and PauseMenu.STATS_URL_NATIVE.ends_with("/metrics/"), "the statistics links point at /metrics/")
-
 	paused = false
 	DirAccess.remove_absolute(ProjectSettings.globalize_path(Settings.path))
 	print("%d check(s) failed" % failures)
