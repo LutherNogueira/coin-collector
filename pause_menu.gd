@@ -5,6 +5,7 @@ extends CanvasLayer
 
 signal avatar_selected(avatar: String)
 signal telemetry_changed(enabled: bool)
+signal opened
 
 const PANEL_BG := Color(0.13, 0.16, 0.26)
 const PANEL_BORDER := Color(0.28, 0.34, 0.52)
@@ -19,6 +20,7 @@ var _resume_button: Button
 var _character_button: Button
 var _stats_button: Button
 var _privacy_button: Button
+var _sound_button: Button
 var _preview: AnimatedSprite2D
 
 
@@ -79,6 +81,10 @@ func _ready() -> void:
 	_stats_button = _button("Statistics")
 	_stats_button.pressed.connect(open_statistics)
 	column.add_child(_stats_button)
+	_sound_button = _button("")
+	_sound_button.pressed.connect(toggle_sound)
+	column.add_child(_sound_button)
+	_show_sound()
 	if EventSender.is_available():   # nothing is sent outside the web build, so there is nothing to switch
 		_privacy_button = _button("")
 		_privacy_button.pressed.connect(toggle_telemetry)
@@ -113,6 +119,8 @@ func toggle() -> void:
 
 func open() -> void:
 	visible = true
+	_show_sound()   # the M key may have changed it since the last time
+	opened.emit()
 	get_tree().paused = true
 	_resume_button.grab_focus()
 
@@ -137,6 +145,17 @@ func set_avatar(new_avatar: String, announce: bool = false) -> void:
 
 func open_statistics() -> void:
 	stats.open(avatar)
+
+
+## Mutes or unmutes everything (the same as the M key, for players without a keyboard).
+func toggle_sound() -> void:
+	Sfx.set_muted(not Sfx.is_muted())
+	_show_sound()
+
+
+func _show_sound() -> void:
+	if _sound_button != null:
+		_sound_button.text = "Sound: %s" % ("off" if Sfx.is_muted() else "on")
 
 
 ## Switches the anonymous statistics on or off and remembers it.
