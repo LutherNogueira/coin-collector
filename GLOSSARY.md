@@ -28,6 +28,10 @@ _Avoid_: Level id, random number
 The version number of the level code (the hand-made Level and the generator). A Seed only reproduces its Level under the same version.
 _Avoid_: Level revision
 
+**Avatar**:
+The character the Player chose to look like. Purely cosmetic and remembered between visits; it is not recorded in the Events.
+_Avoid_: Skin, character
+
 **Player**:
 The square the user moves and makes jump.
 _Avoid_: Character, avatar
@@ -63,3 +67,23 @@ _Avoid_: Log file, dataset
 **Schema**:
 The definition of which Event types exist and which fields each one carries. Versioned by `schema_version`.
 _Avoid_: Format, spec
+
+**Bronze**:
+The raw layer of the pipeline: every line received, exactly as it came, with its source file and line number.
+_Avoid_: Raw table, landing
+
+**Silver**:
+The clean layer: the lines that passed every quality rule, typed and conformed across schema versions, plus the Quarantine.
+_Avoid_: Staging, curated
+
+**Gold**:
+The metrics layer: tables of numbers built from Silver, ready for people to read.
+_Avoid_: Reports, marts
+
+**Quarantine**:
+The Silver table of rejected lines, each with the single reason it failed and where it came from in Bronze.
+_Avoid_: Error table, trash
+
+**Synthetic data**:
+Events produced by a program instead of by players, used to exercise the pipeline and to know the right answers.
+_Avoid_: Fake data, mock data

@@ -1,0 +1,11 @@
+{
+  "name": "coin-collector-ingest",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": "node --test test/"
+  },
+  "dependencies": {
+    "@vercel/blob": "^2.9.0"
+  }
+}

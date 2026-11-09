@@ -4,7 +4,7 @@
 
 All images here come, unmodified, from **Pixel Adventure 1** by Pixel Frog:
 
-- `characters/ninja_frog/*.png`: the Ninja Frog animations (idle, run, jump, fall, hit; 32×32 frames).
+- `characters/<name>/*.png`: the four playable characters (Ninja Frog, Mask Dude, Pink Man, Virtual Guy), each with idle, run, jump, fall and hit animations (32×32 frames).
 - `items/fruits/*.png`: the fruit animations (17 frames each, 32×32) and the "collected" burst (6 frames).
 - `terrain/terrain.png`: the 16×16 terrain tileset (the grass-topped block is used).
 - `terrain/spikes.png`: the 16×16 spike tile.

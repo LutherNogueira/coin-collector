@@ -8,6 +8,7 @@ const VOLUME := -16.0
 
 
 func _init() -> void:
+	process_mode = Node.PROCESS_MODE_ALWAYS   # the music keeps playing while the Esc menu pauses the game
 	var track: AudioStreamMP3 = load(TRACK)
 	track.loop = true
 	stream = track

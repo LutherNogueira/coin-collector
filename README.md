@@ -1,7 +1,5 @@
 # Coin Collector
 
-**Play it in your browser: [coin-collector-omega.vercel.app](https://coin-collector-omega.vercel.app/)** (keyboard only).
-
 A small 2D platformer built with Godot in which the player collects coins while avoiding traps. Every action is recorded to a [JSON Lines](https://jsonlines.org/) file following a documented schema, and a Python validator checks that the recorded data is consistent.
 
 ## Gameplay
@@ -10,7 +8,9 @@ A small 2D platformer built with Godot in which the player collects coins while 
 - Collect every coin (the fruits) in the level. Grass-topped blocks are solid: you can stand on them and cannot pass through them.
 - Spikes are traps (only the visible spike tips kill), and falling into a gap in the ground is also fatal. Dying plays a short "hit" animation, then after 0.6 seconds puts you back at the start of the level with every coin restored, and the round keeps going.
 - There is no time limit. The round is complete when you have collected every coin in one attempt. Press **Enter** for a new level.
+- **Touch screens** get on-screen controls drawn over the game: an analog stick that appears under your left thumb (push gently to walk, fully to run), the right half of the screen to jump, and a pause button in the top right corner that opens the same menu as **Esc**, where **Sound** mutes everything (like **M**). On a computer, add `?touch` to the address to try them with the mouse.
 - The first round of a session plays the hand-made level (level 0). Every later round plays a randomly generated one; its seed is shown in the corner.
+- **Esc** opens a menu and pauses the game (the round clock and the event log stop with it): resume, **choose your character** (Ninja Frog, Mask Dude, Pink Man or Virtual Guy, remembered between visits) and open the **statistics** screen. The choice is a personal setting and is not part of the telemetry.
 - Everything is drawn with pixel art from the Pixel Adventure pack: the player faces the direction of movement and switches between idle, run, jump and fall animations (a short "hit" animation plays where you die), coins are animated fruits with a burst when collected, the terrain uses grass-topped tiles, and a tiled sky background drifts slowly behind. Background music loops during play, and jumping, collecting a fruit, dying and finishing a level each play a sound effect; **M** mutes everything. **F1** shows the real collision shapes (player box, spike hitboxes, coin circles), which are independent of the art.
 
 ## Level generation
@@ -91,7 +91,8 @@ It exits with `0` when everything passes and `1` when there are problems.
 |---|---|
 | `project.godot`, `main.tscn` | Project settings and main scene (a single `Node2D` with a script) |
 | `main.gd` | Game rules, event logging and drawing with native shapes; `_step()` is input-free so it can be simulated |
-| `player_view.gd` | `PlayerView`: sprite animations and mirroring, driven by the physics body; purely visual |
+| `player_view.gd` | `PlayerView`: sprite animations and mirroring for the chosen character, driven by the physics body; purely visual |
+| `pause_menu.gd`, `avatars.gd`, `settings.gd` | The Esc menu, the list of playable characters, and the saved choice (`user://settings.cfg`) |
 | `assets/` | Art, sounds and their credits ([`assets/CREDITS.md`](assets/CREDITS.md)) |
 | `tools/generate_sfx.py` | Synthesizes the sound effects into `assets/sounds/` (no third-party audio) |
 | `tools/fetch_web_templates.py`, `tools/serve_web.py` | Install the web export templates; serve the web build locally |
@@ -105,15 +106,60 @@ It exits with `0` when everything passes and `1` when there are problems.
 | `event_logger.gd` | `EventLogger`: adds ids, timestamp and schema version, appends one JSON line |
 | `schema/` | JSON Schema for one log line, per `schema_version` |
 | `validate_events.py` | Schema and consistency validator |
+| `pipeline/` | The bronze/silver/gold telemetry pipeline, its synthetic data generator and tests |
+| `stats/` | The statistics screen shown from the Esc menu, and its charts; reads the pipeline's gold JSON |
 | `tests/` | Headless level verifier and scripted-play simulation |
 | `GLOSSARY.md`, `docs/adr/` | Domain language and design decisions |
+
+## Telemetry pipeline
+
+[`pipeline/`](pipeline/) turns the event log into metrics with Python and [DuckDB](https://duckdb.org/), in three layers (a "medallion" architecture):
+
+| Layer | Holds | Where |
+|---|---|---|
+| **Bronze** | every line exactly as received, with source file and line number, broken lines included | `bronze.raw_events` |
+| **Silver** | clean, typed events with schema versions 2, 3 and 4 conformed to one shape, plus `quarantine`: each rejected line with one reason (`invalid_json`, `missing_field`, `invalid_timestamp`, `timestamp_out_of_range`, `unsupported_schema_version`, `unknown_event`, `value_out_of_range`, `duplicate`) | `silver.events`, `silver.rounds`, `silver.deaths`, `silver.quarantine` |
+| **Gold** | the metrics | `gold.daily_metrics`, `gold.summary`, `gold.deaths_by_cause`, `gold.deadliest_levels`, `gold.data_quality` |
+
+Metrics, per day in UTC: **rounds**, **completion rate** (completed rounds over rounds that ended), **average and median duration** of completed rounds, and **death rate** (deaths over attempts, where an attempt is one start of the level: the first of each round plus one per respawn).
+
+```bash
+pip install -r pipeline/requirements.txt
+python -m pipeline.generate_synthetic --out pipeline/data/raw/synthetic --days 40      # synthetic demo data, with dirty rows
+python -m pipeline.run_pipeline --raw pipeline/data/raw/synthetic --out pipeline/data/gold.json
+python -m pipeline.run_pipeline --raw "$APPDATA/Godot/app_userdata/Coin Collector/events.jsonl" --label "real plays"
+python -m unittest discover -s pipeline/tests -t .                                      # checks everything against ground truth
+```
+
+The synthetic generator is **not real players**: it writes days of plausible events and adds dirty rows on top, along with a `manifest.json` of the true answers, which the tests compare the pipeline against. See [ADR 0005](docs/adr/0005-medallion-pipeline-tested-against-synthetic-truth.md).
+
+## Statistics screen
+
+**Esc > Statistics** opens, over the paused game, a screen with the pipeline's gold layer: headline numbers (rounds, completion rate, average time, death rate as `deaths / attempts`), rounds and death rate per day, deaths by cause, the deadliest levels and a data-quality summary. **Esc** steps back one level at a time (statistics, then the menu). The code is in [`stats/`](stats/): it only reads `stats/data/gold.json`, written by the pipeline and bundled into the game when it is exported, and it says on screen whether the data is synthetic.
+
+```bash
+python -m pipeline.run_pipeline --raw pipeline/data/raw/synthetic --out stats/data/gold.json
+godot --headless --path . --script res://tests/check_stats.gd      # numbers on screen == gold numbers
+```
+
+Without `stats/data/gold.json` (it is git-ignored) the screen says there is no data and how to generate it. On deploy, the workflow tests the pipeline, builds synthetic demo data, runs it through bronze, silver and gold, checks the game and bundles the result, so the screen is a snapshot taken at deploy time, not live data (see [ADR 0007](docs/adr/0007-statistics-screen-lives-inside-the-game.md)).
+
+## Collecting events from the web build
+
+The web build can send the events of a play session to a small collection endpoint, which stores each batch untouched as a JSON Lines file in [Vercel Blob](https://vercel.com/docs/vercel-blob). Those files are the raw input of the bronze layer, so real players flow through the same pipeline as the synthetic data. Nothing is sent from the desktop build, and the game says so up front: the first visit shows a notice, and **Esc > Send anonymous statistics** switches it off for good. Only the events described in the schema are sent, with a random session id; no account, IP address or browser data is stored.
+
+- **In the page** ([`event_sender.gd`](event_sender.gd)): a few lines of JavaScript buffer the events and send a batch every 10 seconds, when 50 events pile up, and when the page is hidden or closed (`navigator.sendBeacon`). Delivery is best effort; the local log is unaffected.
+- **Endpoint** ([`ingest/api/ingest.js`](ingest/api/ingest.js)): accepts `POST /api/ingest` from its own origin only, rejects anything that is not a well-formed batch ([`_validate.js`](ingest/api/_validate.js): at most 100 events and 64 KB, known event names, schema version 4, a single session per batch) and writes one blob per batch. Game rules are not checked here: a well-formed but nonsensical event is stored and quarantined later by the silver layer. Setting `INGEST_ENABLED=false` in the Vercel project turns collection off without a deploy.
+- **Tests:** `cd ingest && npm test` for the validation, `godot --headless --path . --script res://tests/check_sender.gd` for the event sink and the privacy switch. `python tools/serve_web.py` also answers `/api/ingest` locally (appending to `build/received_events.jsonl`), which is how the sender is tried in a browser.
+
+Setup in Vercel: create a **private** Blob store and connect it to the project (that adds `BLOB_READ_WRITE_TOKEN`). The deploy workflow copies `ingest/api` next to the exported game, because Vercel only sees `build/web`. See [ADR 0008](docs/adr/0008-collect-events-with-sendbeacon-and-blob.md).
 
 ## Web build and deployment
 
 The game also runs in the browser (see the link at the top): Godot exports it to WebAssembly (single-threaded, so no special headers are needed). The picture is scaled to the window and centered, keeping its 800×600 proportions. The `Web` preset in [`export_presets.cfg`](export_presets.cfg) writes to `build/web/` (git-ignored).
 
 - **Branches:** work happens on `dev`; `main` only receives merges from `dev` when a version is ready to publish.
-- **Deploying:** [`.github/workflows/deploy.yml`](.github/workflows/deploy.yml) exports the project on every push to `main` or `dev` and deploys it to [Vercel](https://vercel.com) with the Vercel CLI: `main` becomes the production deployment and `dev` a preview deployment. Vercel cannot export a Godot project itself, so the build runs on GitHub Actions and only the result is uploaded. The repository's [`vercel.json`](vercel.json) turns off Vercel's own Git builds, which would only see source code. The workflow needs three repository secrets (Settings > Secrets and variables > Actions): `VERCEL_TOKEN`, `VERCEL_ORG_ID` and `VERCEL_PROJECT_ID`.
+- **Deploying:** [`.github/workflows/deploy.yml`](.github/workflows/deploy.yml) tests the pipeline, builds the statistics data, checks the game, exports it on every push to `main` or `dev` and deploys it to [Vercel](https://vercel.com) with the Vercel CLI: `main` becomes the production deployment and `dev` a preview deployment. Vercel cannot export a Godot project itself, so the build runs on GitHub Actions and only the result is uploaded. The repository's [`vercel.json`](vercel.json) turns off Vercel's own Git builds, which would only see source code. The workflow needs three repository secrets (Settings > Secrets and variables > Actions): `VERCEL_TOKEN`, `VERCEL_ORG_ID` and `VERCEL_PROJECT_ID`.
 - **Templates:** the web export templates are fetched by [`tools/fetch_web_templates.py`](tools/fetch_web_templates.py), which downloads only the web part (about 40 MB) of the official 1.2 GB templates archive.
 - **Try it locally:** install the web templates, then export and serve:
 

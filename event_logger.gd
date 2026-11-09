@@ -8,6 +8,8 @@ const SCHEMA_VERSION := 4
 
 ## Where events are appended; tests point this at their own file.
 var log_path := LOG_PATH
+## Called with every event line as well as the file write (the web build points it at the sender).
+var sink := Callable()
 var session_id: String = _uuid4()
 var round_id: Variant = null
 
@@ -29,6 +31,8 @@ func log_event(evento: String, valor: Dictionary = {}) -> void:
 		"round_id": round_id,
 		"schema_version": SCHEMA_VERSION,
 	})
+	if sink.is_valid():
+		sink.call(line)
 	var file := FileAccess.open(log_path, FileAccess.READ_WRITE if FileAccess.file_exists(log_path) else FileAccess.WRITE)
 	if file == null:
 		push_error("Could not open %s (error %d)" % [log_path, FileAccess.get_open_error()])

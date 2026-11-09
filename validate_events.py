@@ -140,7 +140,9 @@ def check_round_platformer(label: str, events: list[dict]) -> list[str]:
             dead = False
         elif dead and name not in ("coin_spawn", "round_end"):
             problems.append(f"round {label}: {name} recorded while the player was dead")
-    if names.count("player_death") != names.count("player_respawn"):
+    # The window can be closed while the player is dead, so the last death may have no respawn.
+    expected_respawns = names.count("player_death") - (1 if dead else 0)
+    if names.count("player_respawn") != expected_respawns:
         problems.append(f"round {label}: {names.count('player_death')} deaths but {names.count('player_respawn')} respawns")
 
     # Each attempt (initial start or respawn) spawns every coin exactly once.

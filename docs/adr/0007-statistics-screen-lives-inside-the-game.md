@@ -1,0 +1,5 @@
+# The statistics screen lives inside the game, as a layer of the Esc menu
+
+The statistics screen was first built as a separate Godot project served at `/metrics/` ([ADR 0006](0006-metrics-screen-is-a-separate-godot-project.md)), mainly so the game's web build would not change. That reason ended when the game gained an Esc menu, and the separate page had real costs: it ships a second copy of the engine's WebAssembly file (about 40 MB), it needs a new browser tab that popup blockers may refuse, it cannot be reached from the desktop build without internet, and it leaves the game.
+
+It is now a layer in the game project (`stats/`), opened from the paused menu, with the layout redone for the game's 800x600 picture. The pipeline's gold JSON is written to `stats/data/gold.json` and bundled into the game's package at export time, so the screen is a snapshot of the data at deploy time and needs no server. The deploy workflow therefore builds the data before exporting the game. The `/metrics/` page and the second project are gone; the cost is that the game's package changes with every deploy, because the data inside it does.

@@ -1,0 +1,9 @@
+# Events are collected with sendBeacon batches into Vercel Blob, one file per batch
+
+Real players' events never left their browsers. To feed them to the pipeline the game sends batches to a serverless function that stores each one as a JSON Lines file in Vercel Blob.
+
+- **Batching lives in JavaScript, not GDScript.** Only the page can still send while the tab is closing, and Godot's main loop may already be gone by then. GDScript hands every event line to the page (`EventLogger.sink`), and the page flushes on a timer, at 50 events and on `visibilitychange`/`pagehide` through `navigator.sendBeacon`. The price is that there is no response to read, so delivery is at most once as far as the client knows; for a portfolio game, losing the tail of some sessions is acceptable and the local log is untouched.
+- **One blob per batch, raw.** Blob objects are not appendable, so each batch is its own file (`events/<day>/<session>-<random>.jsonl`), which also makes retries and replays harmless: the silver layer already drops duplicates. The endpoint is a gate against abuse (size, shape, known event names, single session, same origin) and never judges game rules, which stay the silver layer's job.
+- **No streaming platform.** Micro-batches every 10 seconds are as fresh as daily metrics need; a log such as Redis Streams would add a service to run for no visible gain here.
+- **The player is told and can opt out.** A first-visit notice and a menu switch (`Settings.load_telemetry`), nothing is sent outside the web build, and the session id is random. The endpoint stores no IP address or browser data.
+- **Open to the internet means open to forgery.** Anyone can post well-formed fake events, and a same-origin check does not stop a script. The size limits, the validation and the `INGEST_ENABLED` kill switch keep the damage and the bill small, but they do not make the data trustworthy; that is why the statistics screen still ships a synthetic snapshot by default.
