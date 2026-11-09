@@ -1,0 +1,67 @@
+name: Real player data
+
+# Manual run: downloads the event batches the web build stored in Vercel Blob, runs them through bronze, silver and gold,
+# and keeps the aggregated gold.json as a workflow artifact. The raw batches stay on the runner and are never uploaded.
+# It does not touch the game: the deployed statistics screen keeps its own data.
+#
+# No Blob token is stored in GitHub. The job logs in to Vercel with the secrets the deploy already uses and pulls a
+# short-lived credential (VERCEL_OIDC_TOKEN) plus BLOB_STORE_ID for the run.
+on:
+  workflow_dispatch:
+    inputs:
+      skip_session:
+        description: "Session id to leave out (e.g. the test upload); optional"
+        required: false
+        default: "00000000-0000-4000-8000-000000000000"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: real-data
+  cancel-in-progress: false
+
+env:
+  VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+  VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
+  VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
+
+jobs:
+  real-data:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt -r pipeline/requirements.txt -r pipeline/requirements-fetch.txt
+
+      - name: Get short-lived Blob credentials from Vercel
+        # Writes .env.local (git-ignored), which fetch_blobs.py reads. Nothing is printed.
+        run: npx --yes vercel@latest env pull .env.local --environment=production --yes >/dev/null
+
+      - name: Download the event batches
+        env:
+          SKIP_SESSION: ${{ inputs.skip_session }}
+        run: |
+          args=()
+          if [ -n "$SKIP_SESSION" ]; then args+=(--skip-session "$SKIP_SESSION"); fi
+          python -m pipeline.fetch_blobs --out pipeline/data/raw/blob "${args[@]}"
+
+      - name: Run bronze, silver and gold
+        run: |
+          python -m pipeline.run_pipeline --raw pipeline/data/raw/blob --out real_gold.json --label "real plays"
+          ls -l real_gold.json
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: real-gold
+          path: real_gold.json
+          retention-days: 30

@@ -152,6 +152,16 @@ The web build can send the events of a play session to a small collection endpoi
 - **Endpoint** ([`ingest/api/ingest.js`](ingest/api/ingest.js)): accepts `POST /api/ingest` from its own origin only, rejects anything that is not a well-formed batch ([`_validate.js`](ingest/api/_validate.js): at most 100 events and 64 KB, known event names, schema version 4, a single session per batch) and writes one blob per batch. Game rules are not checked here: a well-formed but nonsensical event is stored and quarantined later by the silver layer. Setting `INGEST_ENABLED=false` in the Vercel project turns collection off without a deploy.
 - **Tests:** `cd ingest && npm test` for the validation, `godot --headless --path . --script res://tests/check_sender.gd` for the event sink and the privacy switch. `python tools/serve_web.py` also answers `/api/ingest` locally (appending to `build/received_events.jsonl`), which is how the sender is tried in a browser.
 
+**Using the collected events:** [`pipeline/fetch_blobs.py`](pipeline/fetch_blobs.py) downloads the uploaded batches into a folder, skipping the ones it already has (blobs are never overwritten), and that folder is a bronze source like any other:
+
+```bash
+pip install -r pipeline/requirements-fetch.txt          # the Vercel SDK, only needed for this step
+python -m pipeline.fetch_blobs --out pipeline/data/raw/real
+python -m pipeline.run_pipeline --raw pipeline/data/raw/real --out stats/data/gold.json --label "real plays"
+```
+
+It reads `BLOB_READ_WRITE_TOKEN` from the environment or from a git-ignored `.env.local` (copy it from the Vercel project's Environment Variables; never commit it). `--skip-session <id>` leaves out a test upload.
+
 Setup in Vercel: create a **private** Blob store and connect it to the project (that adds `BLOB_READ_WRITE_TOKEN`). The deploy workflow copies `ingest/api` next to the exported game, because Vercel only sees `build/web`. See [ADR 0008](docs/adr/0008-collect-events-with-sendbeacon-and-blob.md).
 
 ## Web build and deployment
