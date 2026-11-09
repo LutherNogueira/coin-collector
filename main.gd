@@ -4,10 +4,14 @@ const COIN_RADIUS := 12.0
 const SAMPLE_INTERVAL := 0.5
 ## Seconds between a death and the player reappearing at the start. The round clock keeps running.
 const DEATH_DELAY := 0.6
+const NOTICE_SECONDS := 12.0
 
 enum State { PLAYING, DYING, ENDED }
 
 var logger := EventLogger.new()
+var sender := EventSender.new()
+## Seconds left of the first-visit notice about anonymous statistics.
+var notice_left := 0.0
 var state := State.PLAYING
 
 var level: Level
@@ -48,10 +52,17 @@ func _ready() -> void:
 	add_child(hud)
 	menu = PauseMenu.new()
 	menu.avatar_selected.connect(view.set_avatar)
+	menu.telemetry_changed.connect(sender.set_enabled)
 	add_child(menu)
 	var saved_avatar := Settings.load_avatar()
 	view.set_avatar(saved_avatar)
 	menu.set_avatar(saved_avatar)
+	# Sending (web build only) is wired before the first event so session_start is included.
+	sender.start(Settings.load_telemetry())
+	logger.sink = sender.push
+	if EventSender.is_available() and not Settings.notice_seen():
+		notice_left = NOTICE_SECONDS
+		Settings.mark_notice_seen()
 	logger.log_event("session_start")
 	_start_round()
 	view.sync_with(body, 0.0)   # so the player is already in place if the menu is opened on the first frame
@@ -62,6 +73,7 @@ func _process(delta: float) -> void:
 	var move_x := _read_move_x()
 	_step(delta, move_x, jump_down and not jump_was_down)
 	jump_was_down = jump_down
+	notice_left = maxf(notice_left - delta, 0.0)
 	view.sync_with(body, move_x)
 	hud.queue_redraw()
 
@@ -240,6 +252,9 @@ func _draw_hud() -> void:
 
 	_hud_text(Vector2(12, 28), "Coins: %d/%d   Deaths: %d" % [collected.count(true), level.coins.size(), deaths], 22)
 	_hud_text(Vector2(12, Level.ARENA.y - 12), "Level %s   (Esc menu, M mute, F1 hitboxes)" % ("0 (hand-made)" if level.seed_value == 0 else str(level.seed_value)), 14)
+	if notice_left > 0.0:
+		_hud_text(Vector2(0, 56), "This game sends anonymous match statistics to its developer.", 14, HORIZONTAL_ALIGNMENT_CENTER, Level.ARENA.x)
+		_hud_text(Vector2(0, 76), "You can turn that off in the Esc menu.", 14, HORIZONTAL_ALIGNMENT_CENTER, Level.ARENA.x)
 	if state == State.ENDED:
 		_hud_text(Vector2(0, 220), "Level complete!", 40, HORIZONTAL_ALIGNMENT_CENTER, Level.ARENA.x)
 		_hud_text(Vector2(0, 270), "Time: %.1f s   Deaths: %d" % [t, deaths], 26, HORIZONTAL_ALIGNMENT_CENTER, Level.ARENA.x)

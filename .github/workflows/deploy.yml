@@ -1,6 +1,6 @@
 name: Deploy web build
 
-# Tests the telemetry pipeline, builds the statistics data, checks the game, exports it for web and deploys it
+# Tests the telemetry pipeline and the collection endpoint, builds the statistics data, checks the game, exports it for web and deploys it
 # to Vercel: pushes to main go to production, pushes to dev become preview deployments.
 on:
   push:
@@ -63,12 +63,20 @@ jobs:
           python -m pipeline.generate_synthetic --out pipeline/data/raw/synthetic --days 40
           python -m pipeline.run_pipeline --raw pipeline/data/raw/synthetic --out stats/data/gold.json --label "synthetic demo data"
 
-      - name: Check the game (Esc menu and statistics screen)
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Test the collection endpoint
+        run: cd ingest && npm test
+
+      - name: Check the game (Esc menu, statistics screen and event sink)
         run: |
           GODOT=$(ls ~/godot/Godot_v${GODOT_VERSION}-stable_linux.x86_64)
           "$GODOT" --headless --path . --import || true
           "$GODOT" --headless --path . --script res://tests/check_menu.gd
           "$GODOT" --headless --path . --script res://tests/check_stats.gd
+          "$GODOT" --headless --path . --script res://tests/check_sender.gd
 
       - name: Export the web build
         run: |
@@ -78,9 +86,12 @@ jobs:
           ls -la build/web
           test -s build/web/index.html && test -s build/web/index.wasm && test -s build/web/index.pck
 
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 20
+      - name: Add the collection endpoint to the build
+        # Vercel only sees build/web, so the serverless function has to be copied in next to the game.
+        run: |
+          mkdir -p build/web/api
+          cp ingest/api/*.js build/web/api/
+          cp ingest/package.json build/web/package.json
 
       - name: Deploy to Vercel
         run: |

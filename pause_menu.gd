@@ -4,6 +4,7 @@ extends CanvasLayer
 ## character, and opens the statistics screen over it. It keeps running while the rest of the tree is paused.
 
 signal avatar_selected(avatar: String)
+signal telemetry_changed(enabled: bool)
 
 const PANEL_BG := Color(0.13, 0.16, 0.26)
 const PANEL_BORDER := Color(0.28, 0.34, 0.52)
@@ -17,6 +18,7 @@ var stats := StatsScreen.new()
 var _resume_button: Button
 var _character_button: Button
 var _stats_button: Button
+var _privacy_button: Button
 var _preview: AnimatedSprite2D
 
 
@@ -77,6 +79,12 @@ func _ready() -> void:
 	_stats_button = _button("Statistics")
 	_stats_button.pressed.connect(open_statistics)
 	column.add_child(_stats_button)
+	if EventSender.is_available():   # nothing is sent outside the web build, so there is nothing to switch
+		_privacy_button = _button("")
+		_privacy_button.pressed.connect(toggle_telemetry)
+		column.add_child(_privacy_button)
+		column.add_child(_label("Anonymous match statistics help the developer see how the game is played.", 11, MUTED, HORIZONTAL_ALIGNMENT_CENTER))
+		_show_privacy()
 	column.add_child(_label("M mutes the sound   |   F1 shows the hitboxes", 11, MUTED, HORIZONTAL_ALIGNMENT_CENTER))
 	add_child(stats)
 	stats.closed.connect(func() -> void: _stats_button.grab_focus())
@@ -129,6 +137,19 @@ func set_avatar(new_avatar: String, announce: bool = false) -> void:
 
 func open_statistics() -> void:
 	stats.open(avatar)
+
+
+## Switches the anonymous statistics on or off and remembers it.
+func toggle_telemetry() -> void:
+	var enabled := not Settings.load_telemetry()
+	Settings.save_telemetry(enabled)
+	telemetry_changed.emit(enabled)
+	_show_privacy()
+
+
+func _show_privacy() -> void:
+	if _privacy_button != null:
+		_privacy_button.text = "Send anonymous statistics: %s" % ("on" if Settings.load_telemetry() else "off")
 
 
 func _show_avatar() -> void:

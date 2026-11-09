@@ -1,7 +1,5 @@
 # Coin Collector
 
-**Play it in your browser: [coin-collector-omega.vercel.app](https://coin-collector-omega.vercel.app/)** (keyboard only).
-
 A small 2D platformer built with Godot in which the player collects coins while avoiding traps. Every action is recorded to a [JSON Lines](https://jsonlines.org/) file following a documented schema, and a Python validator checks that the recorded data is consistent.
 
 ## Gameplay
@@ -144,6 +142,16 @@ godot --headless --path . --script res://tests/check_stats.gd      # numbers on 
 ```
 
 Without `stats/data/gold.json` (it is git-ignored) the screen says there is no data and how to generate it. On deploy, the workflow tests the pipeline, builds synthetic demo data, runs it through bronze, silver and gold, checks the game and bundles the result, so the screen is a snapshot taken at deploy time, not live data (see [ADR 0007](docs/adr/0007-statistics-screen-lives-inside-the-game.md)).
+
+## Collecting events from the web build
+
+The web build can send the events of a play session to a small collection endpoint, which stores each batch untouched as a JSON Lines file in [Vercel Blob](https://vercel.com/docs/vercel-blob). Those files are the raw input of the bronze layer, so real players flow through the same pipeline as the synthetic data. Nothing is sent from the desktop build, and the game says so up front: the first visit shows a notice, and **Esc > Send anonymous statistics** switches it off for good. Only the events described in the schema are sent, with a random session id; no account, IP address or browser data is stored.
+
+- **In the page** ([`event_sender.gd`](event_sender.gd)): a few lines of JavaScript buffer the events and send a batch every 10 seconds, when 50 events pile up, and when the page is hidden or closed (`navigator.sendBeacon`). Delivery is best effort; the local log is unaffected.
+- **Endpoint** ([`ingest/api/ingest.js`](ingest/api/ingest.js)): accepts `POST /api/ingest` from its own origin only, rejects anything that is not a well-formed batch ([`_validate.js`](ingest/api/_validate.js): at most 100 events and 64 KB, known event names, schema version 4, a single session per batch) and writes one blob per batch. Game rules are not checked here: a well-formed but nonsensical event is stored and quarantined later by the silver layer. Setting `INGEST_ENABLED=false` in the Vercel project turns collection off without a deploy.
+- **Tests:** `cd ingest && npm test` for the validation, `godot --headless --path . --script res://tests/check_sender.gd` for the event sink and the privacy switch. `python tools/serve_web.py` also answers `/api/ingest` locally (appending to `build/received_events.jsonl`), which is how the sender is tried in a browser.
+
+Setup in Vercel: create a **private** Blob store and connect it to the project (that adds `BLOB_READ_WRITE_TOKEN`). The deploy workflow copies `ingest/api` next to the exported game, because Vercel only sees `build/web`. See [ADR 0008](docs/adr/0008-collect-events-with-sendbeacon-and-blob.md).
 
 ## Web build and deployment
 
