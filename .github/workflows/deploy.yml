@@ -1,10 +1,10 @@
 name: Deploy web build
 
 # Exports the Godot project for web and deploys it to Vercel:
-# pushes to main go to production, pushes to dev become preview deployments.
+# pushes to main go to production, pushes to dev and feature/** branches become preview deployments.
 on:
   push:
-    branches: [main, dev]
+    branches: [main, dev, 'feature/**']
   workflow_dispatch:
 
 concurrency:
@@ -43,6 +43,12 @@ jobs:
           rm ~/godot/godot.zip
           chmod +x ~/godot/Godot_v${GODOT_VERSION}-stable_linux.x86_64
           python3 tools/fetch_web_templates.py --version "${GODOT_VERSION}" --dest ~/.local/share/godot/export_templates/${GODOT_VERSION}.stable
+
+      - name: Check the touch controls
+        run: |
+          GODOT=$(ls ~/godot/Godot_v${GODOT_VERSION}-stable_linux.x86_64)
+          "$GODOT" --headless --path . --import || true
+          "$GODOT" --headless --path . --script res://tests/check_touch.gd
 
       - name: Export the web build
         run: |

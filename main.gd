@@ -15,6 +15,7 @@ var body: PlatformPhysics.Body
 var level_view: LevelView
 var view: PlayerView
 var hud: Node2D
+var touch := TouchControls.new()
 var sfx: Sfx
 var show_hitbox := false
 var t := 0.0
@@ -45,12 +46,17 @@ func _ready() -> void:
 	hud = Node2D.new()
 	hud.draw.connect(_draw_hud)
 	add_child(hud)
+	_center_arena()
+	get_viewport().size_changed.connect(_center_arena)
+	touch.forced = touch.forced or TouchControls.requested_by_page()
+	touch.pressed.connect(_on_touch_pressed)
+	add_child(touch)
 	logger.log_event("session_start")
 	_start_round()
 
 
 func _process(delta: float) -> void:
-	var jump_down := Input.is_key_pressed(KEY_W) or Input.is_key_pressed(KEY_SPACE) or Input.is_key_pressed(KEY_UP)
+	var jump_down := Input.is_key_pressed(KEY_W) or Input.is_key_pressed(KEY_SPACE) or Input.is_key_pressed(KEY_UP) or touch.jump_down()
 	var move_x := _read_move_x()
 	_step(delta, move_x, jump_down and not jump_was_down)
 	jump_was_down = jump_down
@@ -81,7 +87,19 @@ func _read_move_x() -> float:
 		x -= 1.0
 	if Input.is_key_pressed(KEY_RIGHT) or Input.is_key_pressed(KEY_D):
 		x += 1.0
-	return x
+	return clampf(x + touch.move_x(), -1.0, 1.0)
+
+
+## The window can be wider or taller than the 800x600 arena (stretch aspect is "expand"); keep the arena in the middle
+## and leave the rest for the touch buttons.
+func _center_arena() -> void:
+	position = ((get_viewport().get_visible_rect().size - Level.ARENA) / 2.0).floor()
+
+
+## After a win, a tap anywhere starts the next level (the touch version of pressing Enter).
+func _on_touch_pressed(_position: Vector2) -> void:
+	if state == State.ENDED:
+		_start_round()
 
 
 ## The first round of a session plays the hand-made level (seed 0); later rounds get a random seed.
@@ -235,7 +253,7 @@ func _draw_hud() -> void:
 	if state == State.ENDED:
 		_hud_text(Vector2(0, 220), "Level complete!", 40, HORIZONTAL_ALIGNMENT_CENTER, Level.ARENA.x)
 		_hud_text(Vector2(0, 270), "Time: %.1f s   Deaths: %d" % [t, deaths], 26, HORIZONTAL_ALIGNMENT_CENTER, Level.ARENA.x)
-		_hud_text(Vector2(0, 315), "Press Enter for a new level", 22, HORIZONTAL_ALIGNMENT_CENTER, Level.ARENA.x)
+		_hud_text(Vector2(0, 315), "Tap for a new level" if touch.is_active() else "Press Enter for a new level", 22, HORIZONTAL_ALIGNMENT_CENTER, Level.ARENA.x)
 
 
 func _hud_text(pos: Vector2, text: String, size: int, align: HorizontalAlignment = HORIZONTAL_ALIGNMENT_LEFT, width: float = -1.0) -> void:
