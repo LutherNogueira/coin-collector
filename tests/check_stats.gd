@@ -61,6 +61,8 @@ func _init() -> void:
 		total_rounds += value
 	_expect(int(total_rounds) == int(s["rounds"]), "the bars add up to the total number of rounds")
 	_expect(stats.badge.text.contains("SYNTHETIC") == gold.is_synthetic(), "the badge says whether the data is synthetic")
+	var few: bool = int(s.get("sessions", 0)) < StatsScreen.FEW_SESSIONS
+	_expect(stats.badge.text.contains("early data") == (few and not gold.is_synthetic()), "the badge warns when real data comes from only a few sessions")
 
 	# Esc steps back one level at a time.
 	await _press_escape()
