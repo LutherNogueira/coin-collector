@@ -63,6 +63,30 @@ jobs:
           python -m pipeline.generate_synthetic --out pipeline/data/raw/synthetic --days 40
           python -m pipeline.run_pipeline --raw pipeline/data/raw/synthetic --out stats/data/gold.json --label "synthetic demo data"
 
+      - name: Use the real player data when there is any (main only)
+        # Production shows real plays as soon as one session has arrived; otherwise (or if anything here fails) the synthetic
+        # data from the step above stays. Blob access is a short-lived Vercel credential, never a stored token.
+        if: github.ref == 'refs/heads/main'
+        continue-on-error: true
+        run: |
+          pip install -r pipeline/requirements-fetch.txt
+          npx --yes vercel@latest env pull .env.local --environment=production --yes >/dev/null
+          python -m pipeline.fetch_blobs --out pipeline/data/raw/blob --skip-session 00000000-0000-4000-8000-000000000000
+          # The game export bundles files from the project root, so the credentials file must not outlive the download.
+          rm -f .env.local
+          python -m pipeline.run_pipeline --raw pipeline/data/raw/blob --out pipeline/data/real_gold.json --label "real plays"
+          python -c "
+          import json, shutil
+          n = json.load(open('pipeline/data/real_gold.json'))['summary']['sessions']
+          if n >= 1:
+              shutil.copy('pipeline/data/real_gold.json', 'stats/data/gold.json')
+          print('real sessions:', n, '-> statistics data is', 'real' if n >= 1 else 'still synthetic')
+          "
+
+      - name: Make sure no credentials file is left in the project
+        if: always()
+        run: rm -f .env.local
+
       - uses: actions/setup-node@v4
         with:
           node-version: 20
