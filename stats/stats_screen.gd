@@ -119,13 +119,26 @@ func _header() -> Control:
 		str(data.meta.get("generated_at", "?")).replace("T", " ").replace("Z", " UTC")], 11, MUTED, true))
 	row.add_child(titles)
 
-	badge = _label("SYNTHETIC DEMO DATA\nnot real players" if data.is_synthetic() else "REAL PLAYS", 11, WARN if data.is_synthetic() else GOOD)
+	badge = _label(_badge_text(), 11, WARN if data.is_synthetic() else GOOD)
 	badge.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	var holder := PanelContainer.new()
 	holder.add_theme_stylebox_override("panel", _style(CARD_BG, 6))
 	holder.add_child(badge)
 	row.add_child(holder)
 	return row
+
+
+## With only a handful of sessions the numbers are mostly the author's own test plays, and the badge says so.
+const FEW_SESSIONS := 10
+
+
+func _badge_text() -> String:
+	if data.is_synthetic():
+		return "SYNTHETIC DEMO DATA\nnot real players"
+	var sessions := int(data.summary.get("sessions", 0))
+	if sessions < FEW_SESSIONS:
+		return "REAL PLAYS\nearly data: %s sessions" % MetricsData.format_int(sessions)
+	return "REAL PLAYS"
 
 
 func _kpi_row() -> Control:

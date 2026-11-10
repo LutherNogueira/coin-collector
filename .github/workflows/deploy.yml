@@ -14,6 +14,8 @@ concurrency:
 env:
   GODOT_VERSION: "4.7.2"
   # Set in the repository's Settings > Secrets and variables > Actions.
+  # Pinned on purpose: this tool runs with the deploy token in its environment, so a new release must be a reviewed change.
+  VERCEL_CLI_VERSION: "65.14.0"
   VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
   VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
   VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
@@ -66,11 +68,12 @@ jobs:
       - name: Use the real player data when there is any (main only)
         # Production shows real plays as soon as one session has arrived; otherwise (or if anything here fails) the synthetic
         # data from the step above stays. Blob access is a short-lived Vercel credential, never a stored token.
+        id: real-data
         if: github.ref == 'refs/heads/main'
-        continue-on-error: true
+        continue-on-error: true   # the deploy still goes out, but the next step makes the failure impossible to miss
         run: |
           pip install -r pipeline/requirements-fetch.txt
-          npx --yes vercel@latest env pull .env.local --environment=production --yes >/dev/null
+          npx --yes vercel@${VERCEL_CLI_VERSION} env pull .env.local --environment=production --yes >/dev/null
           python -m pipeline.fetch_blobs --out pipeline/data/raw/blob --skip-session 00000000-0000-4000-8000-000000000000
           # The game export bundles files from the project root, so the credentials file must not outlive the download.
           rm -f .env.local
@@ -86,6 +89,12 @@ jobs:
       - name: Make sure no credentials file is left in the project
         if: always()
         run: rm -f .env.local
+
+      - name: Say so when the real data could not be used
+        if: steps.real-data.outcome == 'failure'
+        run: |
+          echo "::warning title=Real data not used::The statistics screen shipped with the synthetic data. See the step above."
+          echo "**Warning:** the real player data step failed, so this deploy ships the synthetic statistics." >> "$GITHUB_STEP_SUMMARY"
 
       - uses: actions/setup-node@v4
         with:
@@ -120,7 +129,7 @@ jobs:
 
       - name: Deploy to Vercel
         run: |
-          npm install --global vercel@latest
+          npm install --global vercel@${VERCEL_CLI_VERSION}
           if [ "${GITHUB_REF_NAME}" = "main" ]; then FLAGS="--prod"; else FLAGS=""; fi
           URL=$(vercel deploy build/web $FLAGS --yes)
           echo "Deployed ${GITHUB_REF_NAME}: ${URL}"
